@@ -1,0 +1,1 @@
+g++ SystChecks.cc `root-config --glibs --cflags --libs`

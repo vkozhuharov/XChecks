@@ -61,7 +61,7 @@ expMeasurement_t expData[NP];
 typedef struct {
   double X17mass;
   double gve;
-  double 
+//  double 
 
 } results_t;
 
@@ -512,9 +512,9 @@ int main() {
   init();
 
   //generateTestData();
-  //readMCTestData("data/selectedSPlusB.root","data/usedInput.root");
+  readMCTestData("data/selectedSPlusB.root","data/usedInput.root");
 
-  readMCTestData("data/geneSignalPlusBkg.root","data/inputFilesUsed.root");
+  //readMCTestData("data/geneSignalPlusBkg.root","data/inputFilesUsed.root");
 
 //  writeAllData("output.dat");
 
