@@ -57,12 +57,16 @@ typedef struct {
 
 expMeasurement_t expData[NP];
 
+typedef struct {
+  double minChi2;
+  int posMask;
+  double fitPars[3];
+} graphTestRes_t; 
 
 typedef struct {
   double X17mass;
   double gve;
-//  double 
-
+  graphTestRes_t grRes;
 } results_t;
 
 results_t expRes;
@@ -71,6 +75,7 @@ results_t expRes;
 typedef struct {
   expMeasurement_t *data;
   results_t *res;
+  int success;
 } experiment_t;
 
 
