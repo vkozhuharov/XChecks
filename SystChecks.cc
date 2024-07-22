@@ -17,6 +17,8 @@
 #include "TGraphErrors.h"
 #include "TCanvas.h"
 #include "TFile.h"
+#include "TIterator.h"
+#include "TKey.h"
 
 TRandom myRandom;
 #endif
@@ -26,7 +28,7 @@ TRandom myRandom;
 
 
 const int NP = 47;  //Number of energy points
-const int NS = 14;   //Number of points in the signal
+const int NS = 0;   //Number of points in the signal
 
 
 double eBins[NP];
@@ -72,13 +74,13 @@ typedef struct {
 results_t expRes;
 
 
-typedef struct {
-  expMeasurement_t *data;
-  results_t *res;
+ typedef struct {
+  expMeasurement_t data[NP];
+  results_t res;
   int success;
 } experiment_t;
 
-
+std::vector<experiment_t> expCollection;
 
 
 
@@ -309,7 +311,7 @@ void checkGraph(TGraphErrors *gr) {
 
   TGraphErrors * dgDraw = new TGraphErrors (grPart);
 
-  TCanvas *c1 = new TCanvas();c1->cd(); dgDraw->Draw(); //hPulls->Draw();
+  TCanvas *c1 = new TCanvas();c1->cd(); dgDraw->Draw("AP"); //hPulls->Draw();
   // getchar();
   double pullsRMS = hPulls->GetRMS();
   
@@ -323,7 +325,11 @@ void checkGraph(TGraphErrors *gr) {
 
 
 
-void performSystChecks(){
+void performExpSystChecks(experiment_t &exp){
+  expMeasurement_t * expData =  exp.data;
+
+  std::cout << "================= New experiment ===================== " << std::endl;
+  std::cout << "Experiment X17 mass: " << exp.res.X17mass << std::endl;
 
   TGraphErrors *grSignal = new TGraphErrors();
   TGraphErrors *grPot = new TGraphErrors();
@@ -369,10 +375,10 @@ void performSystChecks(){
 
 
 
-  printGraphErrors(grSignalPot );
-  printGraphErrors(grSignalPotAccCorr );
-  printGraphErrors(grSignalPotAccCorrPotCorr );
-  printGraphErrors(grSignalPotPotCorrAccCorr );
+//  printGraphErrors(grSignalPot );
+//  printGraphErrors(grSignalPotAccCorr );
+//  printGraphErrors(grSignalPotAccCorrPotCorr );
+//  printGraphErrors(grSignalPotPotCorrAccCorr );
   
 
   grSignalPot->SetName("SignalPot");
@@ -447,17 +453,24 @@ void performSystChecks(){
 }
 
 
-void readMCTestData(std::string fData, std::string fInput){
-  TFile *ParsIn = new TFile(fInput.c_str(),"READ");
-  TFile *DataIn = new TFile(fData.c_str(),"READ");
 
-  TGraphErrors *grNEvents = (TGraphErrors *) DataIn->Get("gNObs_Mass_16.800000_gve_0.000790_0");
+
+//void readMCTestData(std::string fData, std::string fInput){
+void readExpDataFromGraphs(TGraphErrors *grNEvents, 
+                    TGraphErrors *grNPoT, 
+                    TGraphErrors *grEffBkg,
+                    TGraphErrors *grSigEff){
+
+//  TFile *ParsIn = new TFile(fInput.c_str(),"READ");
+//  TFile *DataIn = new TFile(fData.c_str(),"READ");
+
+//  TGraphErrors *grNEvents = (TGraphErrors *) DataIn->Get("gNObs_Mass_16.800000_gve_0.000790_0");
   // TGraphErrors *grNEvents = (TGraphErrors *) DataIn->Get("gNObs_Mass_16.800000_gve_0.000592_0");
   //TGraphErrors *grNEvents = (TGraphErrors *) DataIn->Get("gNObs_Mass_16.800000_gve_0.000379_0");
 
-  TGraphErrors *grNPoT   = (TGraphErrors *) ParsIn->Get("fPotGraphUsed");
-  TGraphErrors *grEffBkg = (TGraphErrors *) ParsIn->Get("fBkgGraphUsed");
-  TGraphErrors *grSigEff = (TGraphErrors *) ParsIn->Get("fEffiGraphUsed");
+//  TGraphErrors *grNPoT   = (TGraphErrors *) ParsIn->Get("fPotGraphUsed");
+//  TGraphErrors *grEffBkg = (TGraphErrors *) ParsIn->Get("fBkgGraphUsed");
+//  TGraphErrors *grSigEff = (TGraphErrors *) ParsIn->Get("fEffiGraphUsed");
   std::cout << "  " << grNPoT << "  " << grEffBkg << "  " << grSigEff << "  " << std::endl;
 
   if(! grNPoT  || !grEffBkg || !grSigEff) {
@@ -482,6 +495,14 @@ void readMCTestData(std::string fData, std::string fInput){
       std::cout << "==== ERROR ====" <<  "Mismatched number of points!" << std::endl;
       return;
   }
+
+  //The input structures seem to be self-consistent ... at least
+
+  experiment_t exp;
+
+  expMeasurement_t *expData = exp.data;
+
+
   std::cout << "Filling in the necessary structures " << std::endl;
   for(int i = 0;i<nPoints; i++){
     expData[i].mass.val = grNEvents->GetX()[i];
@@ -502,8 +523,77 @@ void readMCTestData(std::string fData, std::string fInput){
 
   }
 
+  expCollection.push_back(exp);
 
-  std::cout << "=== Reading of data points finished === " << std::endl;
+  std::cout << "=== Reading of data points finished for this experiment === " << std::endl;
+
+//  ParsIn->Close();
+//  DataIn->Close();
+
+ // if(ParsIn) delete ParsIn;
+ // if(DataIn) delete DataIn;
+
+
+
+}
+
+
+
+void readMCTestDataFiles(std::string fData, std::string fInput){
+  TFile *ParsIn = new TFile(fInput.c_str(),"READ");
+  TFile *DataIn = new TFile(fData.c_str(),"READ");
+
+
+  TGraphErrors *grNPoT   = (TGraphErrors *) ParsIn->Get("fPotGraphUsed");
+  TGraphErrors *grEffBkg = (TGraphErrors *) ParsIn->Get("fBkgGraphUsed");
+  TGraphErrors *grSigEff = (TGraphErrors *) ParsIn->Get("fEffiGraphUsed");
+
+
+
+  TIter nextkey( DataIn->GetListOfKeys() );
+  TKey *key;
+
+  while ( (key = (TKey*)nextkey())) {
+    TObject *obj = key->ReadObj();
+    if ( obj->IsA()->InheritsFrom( TGraph::Class() ) ) {
+      TGraphErrors *gr = (TGraphErrors *) obj;
+      const char *grName = gr->GetName();
+      char buf[256]; 
+      strcpy(buf,grName);
+      std::cout << "Found graph with name: " << grName << "  " ;//std::endl;
+      char *ptr;
+      //Have to parse the mass and the coupling from the name:
+      strtok_r(buf,"_",&ptr); strtok_r(0,"_",&ptr);
+      char *mass = strtok_r(0,"_",&ptr); 
+      strtok_r(0,"_",&ptr);
+      char *coupling = strtok_r(0,"_",&ptr);
+      
+      double m = atof(mass); 
+      double eps = atof(coupling);
+
+      std::cout << "Mass: " << m << " Coupling " << eps << std::endl;
+
+      TGraphErrors *grNEvents =   gr; //(TGraphErrors *) DataIn->Get("gNObs_Mass_16.800000_gve_0.000790_0");  
+
+      readExpDataFromGraphs(grNEvents, grNPoT, grEffBkg, grSigEff);
+
+      std::cout << "ExpCollection size: " << expCollection.size() << std::endl;
+
+      expCollection[expCollection.size()-1].res.X17mass = m;
+      expCollection[expCollection.size()-1].res.gve = eps;
+    }
+
+  }
+
+
+
+//  TGraphErrors *grNEvents = (TGraphErrors *) DataIn->Get("gNObs_Mass_16.800000_gve_0.000790_0");  
+
+
+//  readExpDataFromGraphs(grNEvents, grNPoT, grEffBkg, grSigEff);
+
+
+
 
   ParsIn->Close();
   DataIn->Close();
@@ -513,20 +603,31 @@ void readMCTestData(std::string fData, std::string fInput){
 
 }
 
-int main() {
+void performSystChecks(){
+  std::cout << "Checking the consistency of " << expCollection.size() << " experiments" << std::endl;
+  for(int i = 0;i<expCollection.size();i++){
+    performExpSystChecks(expCollection[i]);
+  }
+}
+
+void analyzeSystChecks(){
+
+}
+
+int main(int argc, char **argv) {
   init();
 
   //generateTestData();
-  readMCTestData("data/selectedSPlusB.root","data/usedInput.root");
-
-  //readMCTestData("data/geneSignalPlusBkg.root","data/inputFilesUsed.root");
-
-//  writeAllData("output.dat");
-
+ // readMCTestDataFiles("data/selectedSPlusB.root","data/usedInput.root");
+  readMCTestDataFiles("data/geneSignalPlusBkg.root","data/inputFilesUsed.root");
+  //  writeAllData("output.dat");
   //readAllData("output.dat");
-
   //  printAllData();
   performSystChecks();
   
+
+
+
+
   return 0;
 }
