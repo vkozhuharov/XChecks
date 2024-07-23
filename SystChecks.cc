@@ -19,6 +19,7 @@
 #include "TH1F.h"
 #include "TH2F.h"
 #include "TGraph.h"
+#include "TGraph2D.h"
 #include "TRandom.h"
 #include "TF1.h"
 #include "TGraphErrors.h"
@@ -35,7 +36,7 @@ TRandom myRandom;
 
 
 const int NP = 47;  //Number of energy points
-const int NS = 10;   //Number of points in the signal
+const int NS = 16;   //Number of points in the signal
 
 
 double eBins[NP];
@@ -331,8 +332,7 @@ void checkGraph(TGraphErrors *gr,graphTestRes_t &res) {
 #ifndef CUSTOMFIT
   }
 #endif
-
-  for(int imask = 0;imask<gr->GetN() - NS;imask++){
+  for(int imask = 0;NS > 0 && imask<=gr->GetN() - NS;imask++){
     //copy the graph
     TGraphErrors grPart(*gr);
     //Remove NS points from the graph
@@ -353,6 +353,7 @@ void checkGraph(TGraphErrors *gr,graphTestRes_t &res) {
       iMaskStart = imask;
     }
   }
+  
 #ifdef DEBUGALL
   std::cout << "==" << gr->GetName() << "==  "<< "Best chi2 achieved: " << minChi2 << "  NDF:  " <<  fitF->GetNDF()   << "  with mask starting at:  "
         << iMaskStart << std::endl;
@@ -371,7 +372,7 @@ void checkGraph(TGraphErrors *gr,graphTestRes_t &res) {
   grPart.Fit("pol1","q");
   TF1* fitF = grPart.GetFunction("pol1");
 #endif
-
+  minChi2 = fitF->GetChisquare();
   double averageValue = res.meanValMask = grPart.GetMean(2); //Get mean of the values on the Y axis
 
   TH1F *hPullsMask = new TH1F("hPulsSignalMask","Pulls with respect to a fit",
@@ -750,17 +751,24 @@ void analyzeSystChecks(){
   TH1F *hPullsRMS = new TH1F("hPullsRMS","RMS of the pulls of the data points wrt fit",100,0.0,.1);
   TH1F *hPullsRMSMask = new TH1F("hPullsRMSMask","RMS of the pulls of the data points wrt fit after masking",100,0.0,.1);
 
-  TH1F *hProb = new TH1F("hProb", "Probability of the fit",100,0.0,1.);
-  TH1F *hProbMask = new TH1F("hProbMask", "Probability of the fit after masking",100,0.0,1.);
+  TH1F *hProb = new TH1F("hProb", "Probability of the fit",1000,0.0,1.);
+  TH1F *hProbMask = new TH1F("hProbMask", "Probability of the fit after masking",1000,0.0,1.);
 
   TH1F *hMassMask = new TH1F("hMassMask","Center of the masked region",100,16.01,18.01);
   TH2F *hMassMaskVsMass = new TH2F("hMassMaskVsMass","X17 mass vs center of the masked region",100,16.01,18.01,100,16.01,18.01);
 
   TH1F *hTrueRecoMassDiff = new TH1F("hTrueRecoMassDiff","Difference between the true and the center of masked region mass",100,-2.,2.);
 
-  TH2F *hConstMX17Gve = new TH2F("hConstGveMX17","Constant parameter as a function of MX17 and Gve",100,16.01,18.01,100,0.,1e-3);
+  TH2F *hConstMX17Gve = new TH2F("hConstMX17Gve","Constant parameter as a function of MX17 and Gve",100,16.01,18.01,100,0.,1e-3);
+
+  TH2F *hConstMaskMX17Gve = new TH2F("hConstMaskMX17Gve","Constant parameter as a function of MX17 and Gve",100,16.01,18.01,100,0.,1e-3);
 
   TH2F *hTrueRecoMassDiffMX17Gve = new TH2F("hTrueRecoMassDiffMX17Gve","Obtained mass difference as a function of MX17 and Gve",100,16.01,18.01,100,0.,1e-3);
+  for (int i = 0;i<100;i++){
+    for(int j=0;j<100;j++){
+      hTrueRecoMassDiffMX17Gve->SetBinContent(i+1,j+1,-10);
+    }
+  }
  
 
   TH2F *hChi2MX17Gve = new TH2F("hChi2MX17Gve","Obtained Chi2 as a function of MX17 and Gve",100,16.01,18.01,100,0.,1e-3);
@@ -768,6 +776,24 @@ void analyzeSystChecks(){
 
   TH2F *hProbMX17Gve = new TH2F("hProbMX17Gve","Obtained probability as a function of MX17 and Gve",100,16.01,18.01,100,0.,1e-3);
   TH2F *hProbMaskMX17Gve = new TH2F("hProbMaskMX17Gve","Obtained probability as a function of MX17 and Gve after masking",100,16.01,18.01,100,0.,1e-3);
+
+
+  //Graphs to be stored
+  TGraph2D *grConstMX17Gve = new TGraph2D(); 
+  grConstMX17Gve->SetNameTitle("grConstMX17Gve","Constant parameter as a function of MX17 and Gve");
+
+  TGraph2D *grConstMaskMX17Gve = new TGraph2D(); 
+  grConstMaskMX17Gve->SetNameTitle("grConstMaskMX17Gve","Constant parameter as a function of MX17 and Gve");
+
+  TGraph2D *grTrueRecoMassDiffMX17Gve  = new TGraph2D(); 
+  grTrueRecoMassDiffMX17Gve->SetNameTitle("grTrueRecoMassDiffMX17Gve","Obtained mass difference as a function of MX17 and Gve");
+
+  TGraph2D *grChi2MX17Gve   = new TGraph2D(); 
+  grChi2MX17Gve->SetNameTitle("grChi2MX17Gve","Obtained Chi2 as a function of MX17 and Gve");
+
+  TGraph2D *grChi2MaskMX17Gve   = new TGraph2D(); 
+  grChi2MaskMX17Gve->SetNameTitle("grChi2MaskMX17Gve","Obtained Chi2 as a function of MX17 and Gve after masking");
+
 
 
   for(int i = 0; i < expCollection.size();i++){
@@ -801,21 +827,35 @@ void analyzeSystChecks(){
 
     hTrueRecoMassDiff->Fill( expCollection[i].res.X17mass-expCollection[i].res.grRes.massMask);
 
-    int binGve = (int) ((expCollection[i].res.gve ) / 1e-5 ) ;
-    int binMass = (int) ((expCollection[i].res.X17mass - 16.01) / 0.02) ;
-    hConstMX17Gve->SetBinContent(binMass,binGve,expCollection[i].res.grRes.fitParsMask[0]);
+    int binGve = (int) ((expCollection[i].res.gve ) / 1e-5 ) + 1 ;
+    int binMass = (int) ((expCollection[i].res.X17mass - 16.01) / 0.02) + 1;
+    hConstMX17Gve->SetBinContent(binMass,binGve,expCollection[i].res.grRes.fitPars[0]);
+    grConstMX17Gve->SetPoint(grConstMX17Gve->GetN(),expCollection[i].res.X17mass,expCollection[i].res.gve,expCollection[i].res.grRes.fitPars[0]);
+
+    hConstMaskMX17Gve->SetBinContent(binMass,binGve,expCollection[i].res.grRes.fitParsMask[0]);
+    grConstMaskMX17Gve->SetPoint(grConstMaskMX17Gve->GetN(),expCollection[i].res.X17mass,expCollection[i].res.gve,expCollection[i].res.grRes.fitParsMask[0]);
 
     hTrueRecoMassDiffMX17Gve->SetBinContent(binMass,binGve, expCollection[i].res.X17mass-expCollection[i].res.grRes.massMask);
+    grTrueRecoMassDiffMX17Gve->SetPoint(grTrueRecoMassDiffMX17Gve->GetN(),expCollection[i].res.X17mass,expCollection[i].res.gve,expCollection[i].res.X17mass-expCollection[i].res.grRes.massMask);
 
     hChi2MX17Gve->SetBinContent(binMass,binGve,expCollection[i].res.grRes.chi2);
+    grChi2MX17Gve->SetPoint(grChi2MX17Gve->GetN(),expCollection[i].res.X17mass,expCollection[i].res.gve,expCollection[i].res.grRes.chi2);
+
     hChi2MaskMX17Gve->SetBinContent(binMass,binGve,expCollection[i].res.grRes.minChi2);
+    grChi2MaskMX17Gve->SetPoint(grChi2MaskMX17Gve->GetN(),expCollection[i].res.X17mass,expCollection[i].res.gve,expCollection[i].res.grRes.minChi2);
 
     hProbMX17Gve->SetBinContent(binMass,binGve,expCollection[i].res.grRes.prob);
     hProbMaskMX17Gve->SetBinContent(binMass,binGve,expCollection[i].res.grRes.probMask);
+
+
   }
 
 
-
+  grConstMX17Gve->Write();  
+  grConstMaskMX17Gve->Write();
+  grTrueRecoMassDiffMX17Gve->Write();
+  grChi2MX17Gve->Write();
+  grChi2MaskMX17Gve->Write();
   outHistoFile->Write();
   outHistoFile->Close();
 }
