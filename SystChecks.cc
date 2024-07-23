@@ -7,10 +7,17 @@
 
 #define USEROOT
 #define USEMASS
-#define DEBUG
+//#define DEBUGALL
+//#define DEBUG
+
+#define CUSTOMFIT
+
+
+
 
 #ifdef USEROOT
 #include "TH1F.h"
+#include "TH2F.h"
 #include "TGraph.h"
 #include "TRandom.h"
 #include "TF1.h"
@@ -28,7 +35,7 @@ TRandom myRandom;
 
 
 const int NP = 47;  //Number of energy points
-const int NS = 0;   //Number of points in the signal
+const int NS = 10;   //Number of points in the signal
 
 
 double eBins[NP];
@@ -60,9 +67,19 @@ typedef struct {
 expMeasurement_t expData[NP];
 
 typedef struct {
+  //For the original graph
+  double chi2;
+  double pullsRMS;
+  double meanVal;
+  double fitPars[2];//[2];  //second index - [0]: value of the par; [1] - error
+
+  //For the graph with masked region
   double minChi2;
   int posMask;
-  double fitPars[3];
+  double massMask;
+  double pullsRMSMask;
+  double meanValMask;
+  double fitParsMask[2];//[2];
 } graphTestRes_t; 
 
 typedef struct {
@@ -83,11 +100,12 @@ results_t expRes;
 std::vector<experiment_t> expCollection;
 
 
-
+#define NFITPARS 2
+const Double_t fitFuncInitalPars[NFITPARS] = {1.,0};
 Double_t fitFunc(Double_t *x, Double_t *par){
-  return par[0] + par[1]*x[0];
+//  return par[0] + par[1]*x[0];
+  return par[0] + par[1]*(x[0] - 16.92);
 }
-
 
 
 
@@ -133,8 +151,6 @@ void generateTestData(){
     smearParameter(expData[i].accCorr);  
   }
 }
-
-
 
 
 //=========================================================================
@@ -270,12 +286,45 @@ void printGraphErrors(TGraphErrors *g){
 
 //=========================================================================
 
-void checkGraph(TGraphErrors *gr) {
-  
-  //Fit function to describe the graph
-  auto *fitF = new TF1("fitF",fitFunc,gr->GetX()[0],gr->GetX()[gr->GetN()-1],2);
+void checkGraph(TGraphErrors *gr,graphTestRes_t &res) {
+
+
   double minChi2=1e6;
   int iMaskStart = 0;
+
+
+  //Fit function to describe the graph
+#ifdef CUSTOMFIT
+  TF1 *fitF = new TF1("fitF",fitFunc,gr->GetX()[0],gr->GetX()[gr->GetN()-1],NFITPARS);
+
+
+  fitF->SetParameters(fitFuncInitalPars);
+  gr->Fit(fitF,"q");
+#else
+
+  {
+  gr->Fit("pol1","q");
+  TF1* fitF = gr->GetFunction("pol1");
+#endif
+
+  TH1F *hPulls = new TH1F("hPulsSignal","Pulls with respect to a fit",
+                          50,-5*gr->GetRMS(2),5*gr->GetRMS(2));
+  for(int i = 0;i< gr->GetN();i++) {
+    hPulls->Fill(gr->GetY()[i] - fitF->Eval(gr->GetX()[i]));
+  }
+  res.pullsRMS = hPulls->GetRMS();
+  res.meanVal  = gr->GetMean(2);
+  res.chi2 = fitF->GetChisquare();
+
+  res.fitPars[0] = fitF->GetParameter(0);
+ // res.fitPars[0][1] = fitF->GetParError(0);
+  if(fitF->GetNpar() > 1)
+    res.fitPars[1] = fitF->GetParameter(1);
+ // res.fitPars[1][1] = fitF->GetParError(1);
+   if(hPulls) delete hPulls;
+#ifndef CUSTOMFIT
+  }
+#endif
 
   for(int imask = 0;imask<gr->GetN() - NS;imask++){
     //copy the graph
@@ -284,41 +333,75 @@ void checkGraph(TGraphErrors *gr) {
     for(int i=0;i<NS;i++){
       grPart.RemovePoint(imask);
     }
-    fitF->SetParameters(0.,0.);
+#ifdef CUSTOMFIT
+    fitF->SetParameters(fitFuncInitalPars);
     grPart.Fit(fitF,"q");
-    
+#else
+    grPart.Fit("pol1","q");
+    TF1* fitF = grPart.GetFunction("pol1");
+#endif
+
     double chi2 = fitF->GetChisquare();
     if (chi2<minChi2){
       minChi2 = chi2;
       iMaskStart = imask;
     }
   }
+#ifdef DEBUGALL
   std::cout << "==" << gr->GetName() << "==  "<< "Best chi2 achieved: " << minChi2 << "  NDF:  " <<  fitF->GetNDF()   << "  with mask starting at:  "
         << iMaskStart << std::endl;
+#endif 
+
   TGraphErrors grPart(*gr);
   for(int i=0;i<NS;i++){
     grPart.RemovePoint(iMaskStart);
   }
 
-  double averageValue = grPart.GetMean(2); //Get mean of the values on the Y axis
 
-  TH1F *hPulls = new TH1F("hPulsSignal","Pulls with respect to a fit",
+#ifdef CUSTOMFIT
+  fitF->SetParameters(fitFuncInitalPars);
+  grPart.Fit(fitF,"q");
+#else
+  grPart.Fit("pol1","q");
+  TF1* fitF = grPart.GetFunction("pol1");
+#endif
+
+  double averageValue = res.meanValMask = grPart.GetMean(2); //Get mean of the values on the Y axis
+
+  TH1F *hPullsMask = new TH1F("hPulsSignalMask","Pulls with respect to a fit",
                             50,-5*grPart.GetRMS(2),5*grPart.GetRMS(2));
 
   for(int i = 0;i< grPart.GetN();i++) {
-    hPulls->Fill(grPart.GetY()[i] - fitF->Eval(grPart.GetX()[i]));
+    hPullsMask->Fill(grPart.GetY()[i] - fitF->Eval(grPart.GetX()[i]));
   }
 
+#ifdef DEBUG
   TGraphErrors * dgDraw = new TGraphErrors (grPart);
 
   TCanvas *c1 = new TCanvas();c1->cd(); dgDraw->Draw("AP"); //hPulls->Draw();
   // getchar();
-  double pullsRMS = hPulls->GetRMS();
+#endif
+
+  res.pullsRMSMask = hPullsMask->GetRMS();
   
-  std::cout << "==" << gr->GetName() << "==  "<< "Mean value on Y:   " << averageValue << "  RMS:  " << pullsRMS << " Relative spread: " << pullsRMS/averageValue <<  std::endl;
+#ifdef DEBUGALL
+ std::cout << "==" << gr->GetName() << "==  "<< "Mean value on Y:   " << averageValue << "  RMS:  " << res.pullsRMSMask << " Relative spread: " << res.pullsRMSMask/averageValue <<  std::endl;
+#endif
+
+  //Save the results for further usage
+  res.meanValMask = averageValue; 
+  res.minChi2 =  minChi2;
+  res.posMask = iMaskStart;
+  res.massMask = grPart.GetX()[iMaskStart + NS/2];
+  res.fitParsMask[0] = fitF->GetParameter(0);
+//  res.fitParsMask[0][1] = fitF->GetParError(0);
+  if(fitF->GetNpar() > 1)
+    res.fitParsMask[1] = fitF->GetParameter(1);
+//  res.fitParsMask[1][1] = fitF->GetParError(1);
 
   if(fitF) delete fitF;
-  if(hPulls) delete hPulls;
+
+  if(hPullsMask) delete hPullsMask;
 
 }
 
@@ -328,8 +411,10 @@ void checkGraph(TGraphErrors *gr) {
 void performExpSystChecks(experiment_t &exp){
   expMeasurement_t * expData =  exp.data;
 
+#ifdef DEBUGALL
   std::cout << "================= New experiment ===================== " << std::endl;
   std::cout << "Experiment X17 mass: " << exp.res.X17mass << std::endl;
+#endif
 
   TGraphErrors *grSignal = new TGraphErrors();
   TGraphErrors *grPot = new TGraphErrors();
@@ -386,10 +471,10 @@ void performExpSystChecks(experiment_t &exp){
   grSignalPotAccCorrPotCorr->SetName("SignalPotAccCorrPotCorr");
   grSignalPotPotCorrAccCorr->SetName("SignalPotPotCorrAccCorr");
 
-  checkGraph(grSignalPot);
-  checkGraph(grSignalPotAccCorr);
-  checkGraph(grSignalPotAccCorrPotCorr);
-  checkGraph(grSignalPotPotCorrAccCorr);
+//  checkGraph(grSignalPot,exp.res.grRes[0]);
+  checkGraph(grSignalPotAccCorr,exp.res.grRes);
+//  checkGraph(grSignalPotAccCorrPotCorr,exp.res.grRes[2]);
+//  checkGraph(grSignalPotPotCorrAccCorr,exp.res.grRes[3]);
  
   if(0){ 
 
@@ -471,7 +556,9 @@ void readExpDataFromGraphs(TGraphErrors *grNEvents,
 //  TGraphErrors *grNPoT   = (TGraphErrors *) ParsIn->Get("fPotGraphUsed");
 //  TGraphErrors *grEffBkg = (TGraphErrors *) ParsIn->Get("fBkgGraphUsed");
 //  TGraphErrors *grSigEff = (TGraphErrors *) ParsIn->Get("fEffiGraphUsed");
+#ifdef DEBUGALL
   std::cout << "  " << grNPoT << "  " << grEffBkg << "  " << grSigEff << "  " << std::endl;
+#endif
 
   if(! grNPoT  || !grEffBkg || !grSigEff) {
     std::cout << "=== ERROR === Not all input data structures exist!" << std::endl;
@@ -480,14 +567,18 @@ void readExpDataFromGraphs(TGraphErrors *grNEvents,
 
   //Fill in the experiment measurements structure
   int nPoints = grNEvents->GetN();
-  std::cout << "Number of experimental points to be used: " << nPoints<< std::endl;
+#ifdef DEBUGALL
+ std::cout << "Number of experimental points to be used: " << nPoints<< std::endl;
+#endif
 
   if (nPoints != NP ) {
     std::cout << "Number of points is mismatched between expected and provided, better stop" << std::endl;
     return;
   }
 
+#ifdef DEBUGALL
   std::cout << grNPoT->GetN() << "  " << grEffBkg->GetN() << "  " << grSigEff->GetN() << std::endl;
+#endif
 
   if (grNPoT->GetN() != nPoints 
     || grEffBkg->GetN() != nPoints
@@ -502,8 +593,10 @@ void readExpDataFromGraphs(TGraphErrors *grNEvents,
 
   expMeasurement_t *expData = exp.data;
 
-
+#ifdef DEBUGALL
   std::cout << "Filling in the necessary structures " << std::endl;
+#endif
+
   for(int i = 0;i<nPoints; i++){
     expData[i].mass.val = grNEvents->GetX()[i];
 
@@ -525,7 +618,10 @@ void readExpDataFromGraphs(TGraphErrors *grNEvents,
 
   expCollection.push_back(exp);
 
+#ifdef DEBUGALL
+
   std::cout << "=== Reading of data points finished for this experiment === " << std::endl;
+#endif
 
 //  ParsIn->Close();
 //  DataIn->Close();
@@ -563,7 +659,10 @@ void readMCTestDataFiles(std::string fData, std::string fInput){
       std::cout << "Found graph with name: " << grName << "  " ;//std::endl;
       char *ptr;
       //Have to parse the mass and the coupling from the name:
-      strtok_r(buf,"_",&ptr); strtok_r(0,"_",&ptr);
+      char* name = strtok_r(buf,"_",&ptr); 
+      if(strcmp(name,"gNObs")!= 0) continue;
+      
+      strtok_r(0,"_",&ptr);
       char *mass = strtok_r(0,"_",&ptr); 
       strtok_r(0,"_",&ptr);
       char *coupling = strtok_r(0,"_",&ptr);
@@ -577,7 +676,9 @@ void readMCTestDataFiles(std::string fData, std::string fInput){
 
       readExpDataFromGraphs(grNEvents, grNPoT, grEffBkg, grSigEff);
 
+#ifdef DEBUGALL
       std::cout << "ExpCollection size: " << expCollection.size() << std::endl;
+#endif
 
       expCollection[expCollection.size()-1].res.X17mass = m;
       expCollection[expCollection.size()-1].res.gve = eps;
@@ -606,12 +707,63 @@ void readMCTestDataFiles(std::string fData, std::string fInput){
 void performSystChecks(){
   std::cout << "Checking the consistency of " << expCollection.size() << " experiments" << std::endl;
   for(int i = 0;i<expCollection.size();i++){
+#ifdef DEBUG
+    std::cout << "Processing experiment " << i << " with X Mass " << expCollection[i].res. X17mass << "  and coupling " << expCollection[i].res.gve << std::endl;
+#endif
+
     performExpSystChecks(expCollection[i]);
   }
 }
 
 void analyzeSystChecks(){
+  std::cout << " Number of experiments to analyze:  " << expCollection.size() << std::endl;
 
+
+  TFile *outHistoFile = new TFile("SystCheckResults.root","RECREATE");
+  outHistoFile->cd();
+
+  TH1F *hChi2 = new TH1F("hChi2","Chi2 distribution for the fit of the original data points", 1000,0.0,1000.0);
+  TH1F *hChi2Mask = new TH1F("hChi2Mask","Chi2 distribution for the fit of the points with masked region", 1000,0.0,1000.0);
+
+  TH1F *hMeanVal = new TH1F("HMeanVal","Mean value before masking",100,0.95,1.05);
+  TH1F *hMeanValMask = new TH1F("HMeanValMask","Mean value after masking",100,0.95,1.05);
+
+  TH1F *hConstFit = new TH1F ("hConstFit","The constant parameter of the fit",100,0.95,1.05);
+  TH1F *hConstFitMask = new TH1F ("hConstFitMask","The constant parameter of the fit after masking",100,0.95,1.05);
+ 
+  TH1F *hSlopeFit = new TH1F("hSlopeFit","Slope parameter of the fit",100,-0.2,0.2);
+  TH1F *hSlopeFitMask = new TH1F("hSlopeFitMask","Slope parameter of the fit after masking",100,-0.2,0.2);
+
+  TH2F *hSlopeVsConst = new TH2F("hSlopeVsConst","Correlation between the slope and the constant",100,-0.2,0.2,100,0.95,1.05);
+  TH2F *hSlopeVsConstMask = new TH2F("hSlopeVsConstMask","Correlation between the slope and the constant after masking",100,-0.2,0.2,100,0.95,1.05);
+
+
+  for(int i = 0; i < expCollection.size();i++){
+    hChi2->Fill(expCollection[i].res.grRes.chi2);
+    hChi2Mask->Fill(expCollection[i].res.grRes.minChi2);
+
+    hMeanVal->Fill(expCollection[i].res.grRes.meanVal);
+    hMeanValMask->Fill(expCollection[i].res.grRes.meanValMask);
+
+    if( expCollection[i].res.grRes.meanVal < 0.7 ) {
+      std::cout << "Mass " << expCollection[i].res.X17mass << " Coupling: " << expCollection[i].res.gve << std::endl;
+    }
+
+    hConstFit->Fill(expCollection[i].res.grRes.fitPars[0]);
+    hConstFitMask->Fill(expCollection[i].res.grRes.fitParsMask[0]);
+
+    hSlopeFit->Fill(expCollection[i].res.grRes.fitPars[1]);
+    hSlopeFitMask->Fill(expCollection[i].res.grRes.fitParsMask[1]);
+
+    hSlopeVsConst->Fill(expCollection[i].res.grRes.fitPars[1],expCollection[i].res.grRes.fitPars[0]);
+    hSlopeVsConstMask->Fill(expCollection[i].res.grRes.fitParsMask[1],expCollection[i].res.grRes.fitParsMask[0]);
+
+  }
+
+
+
+  outHistoFile->Write();
+  outHistoFile->Close();
 }
 
 int main(int argc, char **argv) {
@@ -625,6 +777,8 @@ int main(int argc, char **argv) {
   //  printAllData();
   performSystChecks();
   
+
+  analyzeSystChecks();
 
 
 
