@@ -113,6 +113,15 @@ Double_t fitFunc(Double_t *x, Double_t *par){
 }
 
 
+static Double_t SignalShape(double signalpeak,double bes,double lorewidth,double massn, double sqrts){ // return number of signal events produced(not the accepted) / POT at sqrts(s) at gven = 1
+  const double me = 0.511;// MeV
+  const double Wb = -7E-6;// MeV
+  double eRes = (massn*massn - 2*me*me)/(2.*(me+Wb));
+  double eBeam = (sqrts*sqrts - 2*me*me)/(2.*me); // s = 2me^2 + 2meEbeam -> eBeam = (s-2me^2) / 2me
+  return signalpeak*TMath::Voigt(eBeam-eRes,bes*eRes,lorewidth*2,5); // last input was 4 but with low BES can have rounding problems
+}
+
+
 
 void init(){
   for(int i = 0;i<NP;i++) {
@@ -400,7 +409,21 @@ void checkGraph(TGraphErrors *gr,graphTestRes_t &res) {
   res.minChi2 =  minChi2;
   res.posMask = iMaskStart;
 
-  res.massMask = grPart.GetX()[iMaskStart] - ((NS+1)/2)*0.02;
+  if(iMaskStart == NP-NS  ) {
+    res.massMask = grPart.GetX()[iMaskStart-1] - ((NS+1)/2)*0.02;
+  } else {
+    res.massMask = grPart.GetX()[iMaskStart] - ((NS+1)/2)*0.02;
+  }
+  
+  //res.massMask = grPart.GetX()[iMaskStart+NS/2];
+
+  if(res.massMask < 0. ) {
+    std::cout << "res.massMask:   " <<  res.massMask <<  "   iMaskStart:  " << iMaskStart
+      //	      << "   averageValue   " << averageValue
+	      << "    grPart.GetX()[iMaskStart]:  " << grPart.GetX()[iMaskStart-1]
+	      << std::endl;
+  }
+  
   res.fitParsMask[0] = fitF->GetParameter(0);
   res.NDFMask = fitF->GetNDF();
   res.probMask = fitF->GetProb();
@@ -666,7 +689,9 @@ void readMCTestDataFiles(std::string fData, std::string fInput){
       const char *grName = gr->GetName();
       char buf[256]; 
       strcpy(buf,grName);
+#ifdef DEBUG
       std::cout << "Found graph with name: " << grName << "  " ;//std::endl;
+#endif
       char *ptr;
       //Have to parse the mass and the coupling from the name:
       char* name = strtok_r(buf,"_",&ptr); 
@@ -680,7 +705,9 @@ void readMCTestDataFiles(std::string fData, std::string fInput){
       double m = atof(mass); 
       double eps = atof(coupling);
 
+#ifdef DEBUG
       std::cout << "Mass: " << m << " Coupling " << eps << std::endl;
+#endif
 
       TGraphErrors *grNEvents =   gr; //(TGraphErrors *) DataIn->Get("gNObs_Mass_16.800000_gve_0.000790_0");  
 
@@ -826,6 +853,12 @@ void analyzeSystChecks(){
     hMassMaskVsMass->Fill( expCollection[i].res.X17mass,expCollection[i].res.grRes.massMask);
 
     hTrueRecoMassDiff->Fill( expCollection[i].res.X17mass-expCollection[i].res.grRes.massMask);
+    if(fabs(expCollection[i].res.X17mass-expCollection[i].res.grRes.massMask) > 5.) {
+      //Debugging checks...
+      std::cout << "True Mass " << expCollection[i].res.X17mass << " Coupling: " << expCollection[i].res.gve
+		<< "   Found Mass: " << expCollection[i].res.grRes.massMask 
+		<< std::endl;
+    }
 
     int binGve = (int) ((expCollection[i].res.gve ) / 1e-5 ) + 1 ;
     int binMass = (int) ((expCollection[i].res.X17mass - 16.01) / 0.02) + 1;
