@@ -36,7 +36,7 @@ TRandom myRandom;
 
 
 const int NP = 47;  //Number of energy points
-const int NS = 16;   //Number of points in the signal
+const int NS = 10;   //Number of points in the signal
 
 
 double eBins[NP];
@@ -409,13 +409,13 @@ void checkGraph(TGraphErrors *gr,graphTestRes_t &res) {
   res.minChi2 =  minChi2;
   res.posMask = iMaskStart;
 
-  if(iMaskStart == NP-NS  ) {
-    res.massMask = grPart.GetX()[iMaskStart-1] - ((NS+1)/2)*0.02;
-  } else {
-    res.massMask = grPart.GetX()[iMaskStart] - ((NS+1)/2)*0.02;
-  }
+  // if(iMaskStart == NP-NS  ) {
+  //   res.massMask = grPart.GetX()[iMaskStart-1] + ((NS+1)/2)*0.02;
+  // } else {
+  //   res.massMask = grPart.GetX()[iMaskStart] + ((NS+1)/2)*0.02;
+  // }
   
-  //res.massMask = grPart.GetX()[iMaskStart+NS/2];
+  res.massMask = gr->GetX()[iMaskStart+NS/2];
 
   if(res.massMask < 0. ) {
     std::cout << "res.massMask:   " <<  res.massMask <<  "   iMaskStart:  " << iMaskStart
@@ -784,6 +784,11 @@ void analyzeSystChecks(){
   TH1F *hMassMask = new TH1F("hMassMask","Center of the masked region",100,16.01,18.01);
   TH2F *hMassMaskVsMass = new TH2F("hMassMaskVsMass","X17 mass vs center of the masked region",100,16.01,18.01,100,16.01,18.01);
 
+  TH1F *hPosMask = new TH1F("hPosMask","Center of the masked region",47,0,47);
+  TH2F *hPosMaskVsMass = new TH2F("hPosMaskVsMass","X17 mass vs center of the masked region",100,16.01,18.01,47,0,47);
+  TH2F *hPosMaskVsMass2 = new TH2F("hPosMaskVsMass2","X17 mass vs center of the masked region",47,0,47,100,16.01,18.01);
+
+  
   TH1F *hTrueRecoMassDiff = new TH1F("hTrueRecoMassDiff","Difference between the true and the center of masked region mass",100,-2.,2.);
 
   TH2F *hConstMX17Gve = new TH2F("hConstMX17Gve","Constant parameter as a function of MX17 and Gve",100,16.01,18.01,100,0.,1e-3);
@@ -852,6 +857,11 @@ void analyzeSystChecks(){
     hMassMask->Fill( expCollection[i].res.grRes.massMask);
     hMassMaskVsMass->Fill( expCollection[i].res.X17mass,expCollection[i].res.grRes.massMask);
 
+    hPosMask->Fill( expCollection[i].res.grRes.posMask);
+    hPosMaskVsMass->Fill( expCollection[i].res.X17mass,expCollection[i].res.grRes.posMask);
+    hPosMaskVsMass2->Fill( expCollection[i].res.grRes.posMask,expCollection[i].res.X17mass);
+
+    
     hTrueRecoMassDiff->Fill( expCollection[i].res.X17mass-expCollection[i].res.grRes.massMask);
     if(fabs(expCollection[i].res.X17mass-expCollection[i].res.grRes.massMask) > 5.) {
       //Debugging checks...
