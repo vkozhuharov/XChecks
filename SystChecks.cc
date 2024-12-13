@@ -7,6 +7,7 @@
 
 #define USEROOT
 #define USEMASS
+
 //#define DEBUGALL
 //#define DEBUG
 
@@ -85,6 +86,7 @@ typedef struct {
   double pullsRMSMask;
   double meanValMask;
   double fitParsMask[2];//[2];
+  double pulls[NP-NS];
 } graphTestRes_t; 
 
 typedef struct {
@@ -386,9 +388,14 @@ void checkGraph(TGraphErrors *gr,graphTestRes_t &res) {
 
   TH1F *hPullsMask = new TH1F("hPulsSignalMask","Pulls with respect to a fit",
                             50,-5*grPart.GetRMS(2),5*grPart.GetRMS(2));
+  if(grPart.GetN() != NP - NS) {
+    std::cout << "Wrong number of remaining points: " << NP << "   " << NS
+	      << " Graph points:  " << grPart.GetN() << std::endl;      
+  }
 
   for(int i = 0;i< grPart.GetN();i++) {
     hPullsMask->Fill(grPart.GetY()[i] - fitF->Eval(grPart.GetX()[i]));
+    res.pulls[i] = grPart.GetY()[i] - fitF->Eval(grPart.GetX()[i]);
   }
 
 #ifdef DEBUG
@@ -758,7 +765,13 @@ void analyzeSystChecks(){
 
   TFile *outHistoFile = new TFile("SystCheckResults.root","RECREATE");
   outHistoFile->cd();
+  
+  TDirectory *hDir = outHistoFile->mkdir("Histos");
+  outHistoFile->cd();
+  TDirectory *expDir = outHistoFile->mkdir("Experiments");
 
+  hDir->cd();
+  
   TH1F *hChi2 = new TH1F("hChi2","Chi2 distribution for the fit of the original data points", 1000,0.0,1000.0);
   TH1F *hChi2Mask = new TH1F("hChi2Mask","Chi2 distribution for the fit of the points with masked region", 1000,0.0,1000.0);
 
@@ -771,8 +784,8 @@ void analyzeSystChecks(){
   TH1F *hSlopeFit = new TH1F("hSlopeFit","Slope parameter of the fit",100,-0.2,0.2);
   TH1F *hSlopeFitMask = new TH1F("hSlopeFitMask","Slope parameter of the fit after masking",100,-0.2,0.2);
 
-  TH2F *hSlopeVsConst = new TH2F("hSlopeVsConst","Correlation between the slope and the constant",100,-0.2,0.2,100,0.95,1.05);
-  TH2F *hSlopeVsConstMask = new TH2F("hSlopeVsConstMask","Correlation between the slope and the constant after masking",100,-0.2,0.2,100,0.95,1.05);
+  TH2F *hSlopeVsConst = new TH2F("hSlopeVsConst","Correlation between the slope and the constant",100,-0.1,0.1,100,0.975,1.025);
+  TH2F *hSlopeVsConstMask = new TH2F("hSlopeVsConstMask","Correlation between the slope and the constant after masking",100,-0.1,0.1,100,0.975,1.025);
 
 
   TH1F *hPullsRMS = new TH1F("hPullsRMS","RMS of the pulls of the data points wrt fit",100,0.0,.1);
@@ -816,6 +829,12 @@ void analyzeSystChecks(){
 
   TGraph2D *grConstMaskMX17Gve = new TGraph2D(); 
   grConstMaskMX17Gve->SetNameTitle("grConstMaskMX17Gve","Constant parameter as a function of MX17 and Gve");
+  
+  TGraph2D *grSlopeMX17Gve = new TGraph2D(); 
+  grSlopeMX17Gve->SetNameTitle("grSlopeMX17Gve","Slope parameter as a function of MX17 and Gve");
+
+  TGraph2D *grSlopeMaskMX17Gve = new TGraph2D(); 
+  grSlopeMaskMX17Gve->SetNameTitle("grSlopeMaskMX17Gve","Slope parameter as a function of MX17 and Gve");
 
   TGraph2D *grTrueRecoMassDiffMX17Gve  = new TGraph2D(); 
   grTrueRecoMassDiffMX17Gve->SetNameTitle("grTrueRecoMassDiffMX17Gve","Obtained mass difference as a function of MX17 and Gve");
@@ -826,6 +845,7 @@ void analyzeSystChecks(){
   TGraph2D *grChi2MaskMX17Gve   = new TGraph2D(); 
   grChi2MaskMX17Gve->SetNameTitle("grChi2MaskMX17Gve","Obtained Chi2 as a function of MX17 and Gve after masking");
 
+  
 
 
   for(int i = 0; i < expCollection.size();i++){
@@ -878,6 +898,10 @@ void analyzeSystChecks(){
     hConstMaskMX17Gve->SetBinContent(binMass,binGve,expCollection[i].res.grRes.fitParsMask[0]);
     grConstMaskMX17Gve->SetPoint(grConstMaskMX17Gve->GetN(),expCollection[i].res.X17mass,expCollection[i].res.gve,expCollection[i].res.grRes.fitParsMask[0]);
 
+    grSlopeMX17Gve->SetPoint(grSlopeMX17Gve->GetN(),expCollection[i].res.X17mass,expCollection[i].res.gve,expCollection[i].res.grRes.fitPars[1]);
+    grSlopeMaskMX17Gve->SetPoint(grSlopeMaskMX17Gve->GetN(),expCollection[i].res.X17mass,expCollection[i].res.gve,expCollection[i].res.grRes.fitParsMask[1]);
+
+    
     hTrueRecoMassDiffMX17Gve->SetBinContent(binMass,binGve, expCollection[i].res.X17mass-expCollection[i].res.grRes.massMask);
     grTrueRecoMassDiffMX17Gve->SetPoint(grTrueRecoMassDiffMX17Gve->GetN(),expCollection[i].res.X17mass,expCollection[i].res.gve,expCollection[i].res.X17mass-expCollection[i].res.grRes.massMask);
 
@@ -890,12 +914,20 @@ void analyzeSystChecks(){
     hProbMX17Gve->SetBinContent(binMass,binGve,expCollection[i].res.grRes.prob);
     hProbMaskMX17Gve->SetBinContent(binMass,binGve,expCollection[i].res.grRes.probMask);
 
-
+    expDir->cd();
+    TH1F *hPuls = new TH1F(TString::Format("Pulls_%03f_%06f",expCollection[i].res.X17mass,expCollection[i].res.gve),"Pulls",100,-0.1,0.1);
+    for(int p = 0;p<NP-NS;p++){
+      hPuls->Fill(expCollection[i].res.grRes.pulls[p]);
+    }
   }
 
+  outHistoFile->cd();
+  
 
   grConstMX17Gve->Write();  
   grConstMaskMX17Gve->Write();
+  grSlopeMX17Gve->Write();  
+  grSlopeMaskMX17Gve->Write();
   grTrueRecoMassDiffMX17Gve->Write();
   grChi2MX17Gve->Write();
   grChi2MaskMX17Gve->Write();
