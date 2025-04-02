@@ -4,15 +4,19 @@
 #include <string>
 #include <iomanip>
 #include <cmath>
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <string.h>
 
 #define USEROOT
 #define USEMASS
 
-#define DEBUGALL
-#define DEBUG
+//#define DEBUGALL
+//#define DEBUG
 
 #define CUSTOMFIT
-#define SAVEALLPLOTS
+//#define SAVEALLPLOTS
 
 
 
@@ -36,12 +40,13 @@ TRandom myRandom;
 
 
 
-const int NP = 42;  //Number of energy points
+const int NPMAX = 47;  //Number of energy points
 const int NS = 10;   //Number of points in the signal
 
+int NP = 0;
 
-double eBins[NP];
-double massBins[NP];
+double eBins[NPMAX];
+double massBins[NPMAX];
 
 
 const double eMass = 0.511;  // in MeV
@@ -66,7 +71,7 @@ typedef struct {
 } expMeasurement_t;
 
 
-expMeasurement_t expData[NP];
+expMeasurement_t expData[NPMAX];
 
 typedef struct {
   //For the original graph
@@ -86,8 +91,8 @@ typedef struct {
   double pullsRMSMask;
   double meanValMask;
   double fitParsMask[2];//[2];
-  double pulls[NP-NS];
-  double pulls_ov_sigma[NP-NS];
+  double pulls[NPMAX-NS];
+  double pulls_ov_sigma[NPMAX-NS];
 
 #ifdef   SAVEALLPLOTS
   TGraphErrors grN2ovNPoT;
@@ -108,7 +113,7 @@ results_t expRes;
 
 
  typedef struct {
-  expMeasurement_t data[NP];
+  expMeasurement_t data[NPMAX];
   results_t res;
   int success;
 } experiment_t;
@@ -135,8 +140,8 @@ static Double_t SignalShape(double signalpeak,double bes,double lorewidth,double
 
 
 void init(){
-  for(int i = 0;i<NP;i++) {
-    memset(expData,0,NP* (sizeof(expMeasurement_t)));
+  for(int i = 0;i<NPMAX;i++) {
+    memset(expData,0,NPMAX* (sizeof(expMeasurement_t)));
   }
 }
 
@@ -150,7 +155,7 @@ void calcParError( expParameter_t &par  ){
 
 void generateTestData(){
   
-  for (int i = 0;i<NP;i++) {
+  for (int i = 0;i<NPMAX;i++) {
     expData[i].E.val = 275. + 0.7*i;
     
     expData[i].mass.val = std::sqrt(2.*  expData[i].E.val * eMass);
@@ -201,7 +206,7 @@ void writeDataPoint(std::ofstream &fs,expMeasurement_t &point){
 
 void writeAllData(std::string fname){
   std::ofstream fs(fname, std::ios::out | std::ios::binary );
-  for(int i = 0;i<NP;i++) {
+  for(int i = 0;i<NPMAX;i++) {
     writeDataPoint(fs,(expData[i]));
   }
   fs.close();
@@ -229,7 +234,7 @@ void readDataPoint(std::ifstream &fs,expMeasurement_t &point){
 
 void readAllData(std::string fname){
   std::ifstream fs(fname, std::ios::in | std::ios::binary );
-  for(int i = 0;i<NP;i++) {
+  for(int i = 0;i<NPMAX;i++) {
     readDataPoint(fs,(expData[i]));
   }
   fs.close();
@@ -254,7 +259,7 @@ void printDataPoint(expMeasurement_t &point){
 }
 
 void printAllData(){
-  for(int i = 0;i<NP;i++) {
+  for(int i = 0;i<NPMAX;i++) {
     printDataPoint((expData[i]));
   }
 }
@@ -417,7 +422,9 @@ void checkGraph(TGraphErrors *gr,graphTestRes_t &res) {
     res.pulls[i] = grPart.GetY()[i] - fitF->Eval(grPart.GetX()[i]);
     res.pulls_ov_sigma[i] = (grPart.GetY()[i] - fitF->Eval(grPart.GetX()[i])) /grPart.GetEY()[i] ;
     hPullsOvSigmaMask->Fill(  (grPart.GetY()[i] - fitF->Eval(grPart.GetX()[i])) /grPart.GetEY()[i]  );
+#ifdef     SAVEALLPLOTS
     res.grPullsOvSigma.SetPoint( res.grPullsOvSigma.GetN() , grPart.GetX()[i],  (grPart.GetY()[i] - fitF->Eval(grPart.GetX()[i])) /grPart.GetEY()[i]  );
+#endif
   }
 
 #ifdef DEBUGALL
@@ -477,6 +484,7 @@ void checkGraph(TGraphErrors *gr,graphTestRes_t &res) {
   if(fitF) delete fitF;
 
   if(hPullsMask) delete hPullsMask;
+  if(hPullsOvSigmaMask) delete hPullsOvSigmaMask;
 
 }
 
@@ -665,10 +673,10 @@ void readExpDataFromGraphs(TGraphErrors *grNEvents,
   }
 
   //Fill in the experiment measurements structure
-  int nPoints = grNEvents->GetN();
-#ifdef DEBUGALL
- std::cout << "Number of experimental points to be used: " << nPoints<< std::endl;
-#endif
+  int nPoints = NP = grNEvents->GetN();
+  //#ifdef DEBUGALL
+  std::cout << "Number of experimental points to be used: " << nPoints<< std::endl;
+ //#endif
 
   if (nPoints != NP ) {
     std::cout << "Number of points is mismatched between expected and provided, better stop" << std::endl;
@@ -811,7 +819,7 @@ void performSystChecks(){
   std::cout << "Checking the consistency of " << expCollection.size() << " experiments" << std::endl;
   for(int i = 0;i<expCollection.size();i++){
 #ifdef DEBUG
-    std::cout << "Processing experiment " << i << " with X Mass " << expCollection[i].res. X17mass << "  and coupling " << expCollection[i].res.gve << std::endl;
+    std::cout << "Processing experiment " << i+1 << " with X Mass " << expCollection[i].res. X17mass << "  and coupling " << expCollection[i].res.gve << std::endl;
 #endif
 
     performExpSystChecks(expCollection[i]);
@@ -845,27 +853,31 @@ void analyzeSystChecks(){
   
   hDir->cd();
   
-  TH1F *hChi2 = new TH1F("hChi2","Chi2 distribution for the fit of the original data points", 1000,0.0,1000.0);
   TH1F *hChi2Mask = new TH1F("hChi2Mask","Chi2 distribution for the fit of the points with masked region", 1000,0.0,1000.0);
 
-  TH1F *hMeanVal = new TH1F("HMeanVal","Mean value before masking",100,0.95,1.05);
   TH1F *hMeanValMask = new TH1F("HMeanValMask","Mean value after masking",100,0.95,1.05);
 
-  TH1F *hConstFit = new TH1F ("hConstFit","The constant parameter of the fit",100,0.95,1.05);
   TH1F *hConstFitMask = new TH1F ("hConstFitMask","The constant parameter of the fit after masking",100,0.95,1.05);
  
-  TH1F *hSlopeFit = new TH1F("hSlopeFit","Slope parameter of the fit",100,-0.2,0.2);
   TH1F *hSlopeFitMask = new TH1F("hSlopeFitMask","Slope parameter of the fit after masking",100,-0.2,0.2);
 
-  TH2F *hSlopeVsConst = new TH2F("hSlopeVsConst","Correlation between the slope and the constant",100,-0.1,0.1,100,0.975,1.025);
   TH2F *hSlopeVsConstMask = new TH2F("hSlopeVsConstMask","Correlation between the slope and the constant after masking",100,-0.1,0.1,100,0.975,1.025);
 
-
-  TH1F *hPullsRMS = new TH1F("hPullsRMS","RMS of the pulls of the data points wrt fit",100,0.0,.1);
   TH1F *hPullsRMSMask = new TH1F("hPullsRMSMask","RMS of the pulls of the data points wrt fit after masking",100,0.0,.1);
 
-  TH1F *hProb = new TH1F("hProb", "Probability of the fit",1000,0.0,1.);
   TH1F *hProbMask = new TH1F("hProbMask", "Probability of the fit after masking",1000,0.0,1.);
+
+#ifndef SAVEALLPLOTS
+  TH1::AddDirectory(false);
+#endif
+  
+  TH1F *hChi2 = new TH1F("hChi2","Chi2 distribution for the fit of the original data points", 1000,0.0,1000.0);
+  TH1F *hMeanVal = new TH1F("HMeanVal","Mean value before masking",100,0.95,1.05);
+  TH1F *hConstFit = new TH1F ("hConstFit","The constant parameter of the fit",100,0.95,1.05);
+  TH1F *hSlopeFit = new TH1F("hSlopeFit","Slope parameter of the fit",100,-0.2,0.2);
+  TH2F *hSlopeVsConst = new TH2F("hSlopeVsConst","Correlation between the slope and the constant",100,-0.1,0.1,100,0.975,1.025);
+  TH1F *hPullsRMS = new TH1F("hPullsRMS","RMS of the pulls of the data points wrt fit",100,0.0,.1);
+  TH1F *hProb = new TH1F("hProb", "Probability of the fit",1000,0.0,1.);
 
   TH1F *hMassMask = new TH1F("hMassMask","Center of the masked region",100,16.01,18.01);
   TH2F *hMassMaskVsMass = new TH2F("hMassMaskVsMass","X17 mass vs center of the masked region",100,16.01,18.01,100,16.01,18.01);
@@ -873,6 +885,9 @@ void analyzeSystChecks(){
   TH1F *hPosMask = new TH1F("hPosMask","Center of the masked region",47,0,47);
   TH2F *hPosMaskVsMass = new TH2F("hPosMaskVsMass","X17 mass vs center of the masked region",100,16.01,18.01,47,0,47);
   TH2F *hPosMaskVsMass2 = new TH2F("hPosMaskVsMass2","X17 mass vs center of the masked region",47,0,47,100,16.01,18.01);
+
+
+  
 
   
   TH1F *hTrueRecoMassDiff = new TH1F("hTrueRecoMassDiff","Difference between the true and the center of masked region mass",100,-2.,2.);
@@ -918,7 +933,6 @@ void analyzeSystChecks(){
   TGraph2D *grChi2MaskMX17Gve   = new TGraph2D(); 
   grChi2MaskMX17Gve->SetNameTitle("grChi2MaskMX17Gve","Obtained Chi2 as a function of MX17 and Gve after masking");
 
-  
 
 
   for(int i = 0; i < expCollection.size();i++){
@@ -956,7 +970,7 @@ void analyzeSystChecks(){
 
     
     hTrueRecoMassDiff->Fill( expCollection[i].res.X17mass-expCollection[i].res.grRes.massMask);
-    if(fabs(expCollection[i].res.X17mass-expCollection[i].res.grRes.massMask) > 5.) {
+    //    if(fabs(expCollection[i].res.X17mass-expCollection[i].res.grRes.massMask) > 5.) {
       //Debugging checks...
 #ifdef DEBUGALL
       std::cout << "True Mass " << expCollection[i].res.X17mass << " Coupling: " << expCollection[i].res.gve
@@ -964,7 +978,7 @@ void analyzeSystChecks(){
 		<< std::endl;
 #endif
       
-    }
+      //    }
 
     int binGve = (int) ((expCollection[i].res.gve ) / 1e-5 ) + 1 ;
     int binMass = (int) ((expCollection[i].res.X17mass - 16.01) / 0.02) + 1;
@@ -1020,13 +1034,16 @@ void analyzeSystChecks(){
   outHistoFile->cd();
   
 
-  grConstMX17Gve->Write();  
   grConstMaskMX17Gve->Write();
-  grSlopeMX17Gve->Write();  
+  grChi2MaskMX17Gve->Write();
   grSlopeMaskMX17Gve->Write();
+  
+#ifdef SAVEALLPLOTS
+  grSlopeMX17Gve->Write();  
   grTrueRecoMassDiffMX17Gve->Write();
   grChi2MX17Gve->Write();
-  grChi2MaskMX17Gve->Write();
+  grConstMX17Gve->Write();  
+#endif
   
   outHistoFile->Write();
   outHistoFile->Close();
@@ -1062,14 +1079,80 @@ int readExpDataFile(std::string fData){
 int main(int argc, char **argv) {
   init();
 
+  char dataFile[56];
+  char mcFileSigBkg[56];
+  char mcFilePotEff[56];
+
+  int mc = 0;
+  int dataFilePresent = 0;
+  int mcFileSigBkgPresent=0;
+  int mcFilePotEffPresent=0;
+
+  int opt;
+  
+  
+  while ((opt = getopt(argc, argv, "d:ms:p:")) != -1) {
+    switch (opt) {
+    case 'd':
+      printf("Using data file: %s\n",optarg);
+      strcpy(dataFile,optarg);
+      dataFilePresent=1;
+      break;
+    case 'm':
+      mc=1;
+      break;
+    case 's':
+      printf("Using MC generated series of experiments: %s\n",optarg);
+      strcpy(mcFileSigBkg,optarg);
+      mcFileSigBkgPresent=1;
+      break;
+    case 'p':
+      printf("Using MC generated PoT and determined efficiencies: %s\n",optarg);
+      strcpy(mcFilePotEff ,optarg);
+      mcFilePotEffPresent=1;
+      break;
+
+      
+    default: /* '?' */
+      fprintf(stderr, "Usage:\n  \t%s [-d dataFile] \n\t%s [ -s SignaBkgFile -p PoTFile]\n",
+	      argv[0],argv[0]);
+      exit(EXIT_FAILURE);
+    }
+  }
+  
+  
+  // return 0;;  
+    
   //generateTestData();
  // readMCTestDataFiles("data/selectedSPlusB.root","data/usedInput.root");
-  // readMCTestDataFiles("data/geneSignalPlusBkg.root","data/inputFilesUsed.root");
-  readExpDataFile("prova_zip.root");
+  //   readMCTestDataFiles("data/geneSignalPlusBkg.root","data/inputFilesUsed.root");
+  // readExpDataFile("prova_zip.root");
   //  writeAllData("output.dat");
   //readAllData("output.dat");
   //  printAllData();
-  performSystChecks();
+
+  if((dataFilePresent == 0 && mc == 0) || (  dataFilePresent == 1 && mc == 1 )   ) {
+    std::cout << " You need either MC or data to be processed " << " .... EXITING" << std::endl;
+    exit(0);
+  }
+
+  
+  
+   if(dataFilePresent) {
+     readExpDataFile(dataFile);
+   }
+
+   if(mc) {
+     if(mcFileSigBkgPresent == 1 && mcFilePotEffPresent ==1) {
+       readMCTestDataFiles(mcFileSigBkg,mcFilePotEff);
+     } else {
+       std::cout << "Please provide the two data files with MC experiments and PoT, signam and Bkg efficiency..." << " ... EXITING" << std::endl;
+       exit(0);
+     }
+   }
+   
+   
+   performSystChecks();
   
 
   analyzeSystChecks();
