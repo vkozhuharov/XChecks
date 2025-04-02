@@ -8,11 +8,11 @@
 #define USEROOT
 #define USEMASS
 
-//#define DEBUGALL
-//#define DEBUG
+#define DEBUGALL
+#define DEBUG
 
 #define CUSTOMFIT
-
+#define SAVEALLPLOTS
 
 
 
@@ -36,7 +36,7 @@ TRandom myRandom;
 
 
 
-const int NP = 47;  //Number of energy points
+const int NP = 42;  //Number of energy points
 const int NS = 10;   //Number of points in the signal
 
 
@@ -87,6 +87,15 @@ typedef struct {
   double meanValMask;
   double fitParsMask[2];//[2];
   double pulls[NP-NS];
+  double pulls_ov_sigma[NP-NS];
+
+#ifdef   SAVEALLPLOTS
+  TGraphErrors grN2ovNPoT;
+  TGraphErrors grN2ovNPoTCorr;
+  TGraphErrors grN2ovNPoTCorrMask;
+  TGraphErrors grPullsOvSigma;
+#endif
+  
 } graphTestRes_t; 
 
 typedef struct {
@@ -365,10 +374,18 @@ void checkGraph(TGraphErrors *gr,graphTestRes_t &res) {
     }
   }
   
-#ifdef DEBUGALL
-  std::cout << "==" << gr->GetName() << "==  "<< "Best chi2 achieved: " << minChi2 << "  NDF:  " <<  fitF->GetNDF()   << "  with mask starting at:  "
-        << iMaskStart << std::endl;
-#endif 
+#ifdef DEBUG
+  std::cout << "==" << gr->GetName() << "==  "<< "Best chi2 achieved: " << minChi2 << "  NDF:  " <<  fitF->GetNDF()
+#ifdef DEBUGALL    
+	    << "  with mask starting at:  "
+	    << iMaskStart
+	    << "  Starting from chi2:   "
+	    << res.chi2
+#endif
+	    << std::endl;
+#endif
+
+  
 
   TGraphErrors grPart(*gr);
   for(int i=0;i<NS;i++){
@@ -388,6 +405,8 @@ void checkGraph(TGraphErrors *gr,graphTestRes_t &res) {
 
   TH1F *hPullsMask = new TH1F("hPulsSignalMask","Pulls with respect to a fit",
                             50,-5*grPart.GetRMS(2),5*grPart.GetRMS(2));
+  TH1F *hPullsOvSigmaMask = new TH1F("hPulsOvSigmaSignalMask","Pulls over sigma with respect to a fit",
+                            50,-10,10);
   if(grPart.GetN() != NP - NS) {
     std::cout << "Wrong number of remaining points: " << NP << "   " << NS
 	      << " Graph points:  " << grPart.GetN() << std::endl;      
@@ -396,9 +415,12 @@ void checkGraph(TGraphErrors *gr,graphTestRes_t &res) {
   for(int i = 0;i< grPart.GetN();i++) {
     hPullsMask->Fill(grPart.GetY()[i] - fitF->Eval(grPart.GetX()[i]));
     res.pulls[i] = grPart.GetY()[i] - fitF->Eval(grPart.GetX()[i]);
+    res.pulls_ov_sigma[i] = (grPart.GetY()[i] - fitF->Eval(grPart.GetX()[i])) /grPart.GetEY()[i] ;
+    hPullsOvSigmaMask->Fill(  (grPart.GetY()[i] - fitF->Eval(grPart.GetX()[i])) /grPart.GetEY()[i]  );
+    res.grPullsOvSigma.SetPoint( res.grPullsOvSigma.GetN() , grPart.GetX()[i],  (grPart.GetY()[i] - fitF->Eval(grPart.GetX()[i])) /grPart.GetEY()[i]  );
   }
 
-#ifdef DEBUG
+#ifdef DEBUGALL
   TGraphErrors * dgDraw = new TGraphErrors (grPart);
 
   TCanvas *c1 = new TCanvas();c1->cd(); dgDraw->Draw("AP"); //hPulls->Draw();
@@ -407,8 +429,15 @@ void checkGraph(TGraphErrors *gr,graphTestRes_t &res) {
 
   res.pullsRMSMask = hPullsMask->GetRMS();
   
-#ifdef DEBUGALL
- std::cout << "==" << gr->GetName() << "==  "<< "Mean value on Y:   " << averageValue << "  RMS:  " << res.pullsRMSMask << " Relative spread: " << res.pullsRMSMask/averageValue <<  std::endl;
+#ifdef DEBUG
+ std::cout << "==" << gr->GetName() << "==  "<< "Mean value on Y:   " << averageValue << "  RMS:  " << res.pullsRMSMask << " Relative spread: " << res.pullsRMSMask/averageValue
+   //	   <<  std::endl;
+   // std::cout << "==" << gr->GetName() << "=="
+	   << "  RMS of the pulls/sigma:   "<< hPullsOvSigmaMask->GetRMS() <<  std::endl;
+ std::cout << "==" << gr->GetName()
+	   << "==  Const:   "<< fitF->GetParameter(0) << " +- " << fitF->GetParError(0) 
+	   << "   Slope:  " << fitF->GetParameter(1) << " +- " << fitF->GetParError(1)
+	   <<  std::endl;
 #endif
 
   //Save the results for further usage
@@ -439,6 +468,12 @@ void checkGraph(TGraphErrors *gr,graphTestRes_t &res) {
     res.fitParsMask[1] = fitF->GetParameter(1);
 //  res.fitParsMask[1][1] = fitF->GetParError(1);
 
+  
+#ifdef SAVEALLPLOTS
+  res.grN2ovNPoTCorrMask = grPart;
+#endif
+
+  
   if(fitF) delete fitF;
 
   if(hPullsMask) delete hPullsMask;
@@ -462,6 +497,7 @@ void performExpSystChecks(experiment_t &exp){
   TGraphErrors *grAccCorr = new TGraphErrors();
 
 
+  
   //initialize the graphs
 #ifndef USEMASS
 
@@ -511,11 +547,34 @@ void performExpSystChecks(experiment_t &exp){
   grSignalPotAccCorrPotCorr->SetName("SignalPotAccCorrPotCorr");
   grSignalPotPotCorrAccCorr->SetName("SignalPotPotCorrAccCorr");
 
+#ifdef SAVEALLPLOTS
+  exp.res.grRes.grN2ovNPoT = (* grSignalPot );
+  exp.res.grRes.grN2ovNPoTCorr = (* grSignalPotAccCorr );
+#endif
+  
 //  checkGraph(grSignalPot,exp.res.grRes[0]);
   checkGraph(grSignalPotAccCorr,exp.res.grRes);
 //  checkGraph(grSignalPotAccCorrPotCorr,exp.res.grRes[2]);
 //  checkGraph(grSignalPotPotCorrAccCorr,exp.res.grRes[3]);
+
+#ifdef SAVEALLPLOTS  
+
+  exp.res.grRes.grN2ovNPoT.SetTitle(TString::Format("grN2ovNPoT_%03f_%06f",exp.res.X17mass,exp.res.gve));
+  exp.res.grRes.grN2ovNPoT.SetName(TString::Format("grN2ovNPoT_%03f_%06f",exp.res.X17mass,exp.res.gve));
+
+  exp.res.grRes.grN2ovNPoTCorr.SetTitle(TString::Format("grN2ovNPoTCorr_%03f_%06f",exp.res.X17mass,exp.res.gve));
+  exp.res.grRes.grN2ovNPoTCorr.SetName(TString::Format("grN2ovNPoTCorr_%03f_%06f",exp.res.X17mass,exp.res.gve));
+
+
+   exp.res.grRes.grN2ovNPoTCorrMask.SetTitle(TString::Format("grN2ovNPoTCorrMask_%03f_%06f",exp.res.X17mass,exp.res.gve));
+  exp.res.grRes.grN2ovNPoTCorrMask.SetName(TString::Format("grN2ovNPoTCorrMask_%03f_%06f",exp.res.X17mass,exp.res.gve));
+
+  exp.res.grRes.grPullsOvSigma.SetTitle(TString::Format("grPullsOvSigma_%03f_%06f",exp.res.X17mass,exp.res.gve));
+  exp.res.grRes.grPullsOvSigma.SetName(TString::Format("grPullsOvSigma_%03f_%06f",exp.res.X17mass,exp.res.gve));
+
  
+#endif
+
   if(0){ 
 
   grSignalPot->Fit("pol1","q");
@@ -651,7 +710,7 @@ void readExpDataFromGraphs(TGraphErrors *grNEvents,
     expData[i].accCorr.val = 1./grEffBkg->GetY()[i];
     expData[i].accCorr.err = grEffBkg->GetEY()[i] / (expData[i].accCorr.val * expData[i].accCorr.val )  ;
 
-    expData[i].potCorr.val = 0.878;
+    expData[i].potCorr.val = 1.;// 0.878;
     expData[i].potCorr.err = 0.;//0.08*expData[i].potCorr.val;
 
   }
@@ -770,6 +829,20 @@ void analyzeSystChecks(){
   outHistoFile->cd();
   TDirectory *expDir = outHistoFile->mkdir("Experiments");
 
+#ifdef SAVEALLPLOTS
+  outHistoFile->cd();
+  TDirectory *N2ovNPoTDir = outHistoFile->mkdir("N2ovNPoT");
+
+  outHistoFile->cd();
+  TDirectory *N2ovNPoTCorrDir = outHistoFile->mkdir("N2ovNPoTCorr");
+
+  outHistoFile->cd();
+  TDirectory *N2ovNPoTCorrMaskDir = outHistoFile->mkdir("N2ovNPoTCorrMask");
+  
+  outHistoFile->cd();
+  TDirectory *PullsOvSigmaDir = outHistoFile->mkdir("PullsOvSigma");
+#endif
+  
   hDir->cd();
   
   TH1F *hChi2 = new TH1F("hChi2","Chi2 distribution for the fit of the original data points", 1000,0.0,1000.0);
@@ -885,9 +958,12 @@ void analyzeSystChecks(){
     hTrueRecoMassDiff->Fill( expCollection[i].res.X17mass-expCollection[i].res.grRes.massMask);
     if(fabs(expCollection[i].res.X17mass-expCollection[i].res.grRes.massMask) > 5.) {
       //Debugging checks...
+#ifdef DEBUGALL
       std::cout << "True Mass " << expCollection[i].res.X17mass << " Coupling: " << expCollection[i].res.gve
 		<< "   Found Mass: " << expCollection[i].res.grRes.massMask 
 		<< std::endl;
+#endif
+      
     }
 
     int binGve = (int) ((expCollection[i].res.gve ) / 1e-5 ) + 1 ;
@@ -916,9 +992,29 @@ void analyzeSystChecks(){
 
     expDir->cd();
     TH1F *hPuls = new TH1F(TString::Format("Pulls_%03f_%06f",expCollection[i].res.X17mass,expCollection[i].res.gve),"Pulls",100,-0.1,0.1);
+    TH1F *hPuls_ov_sigma = new TH1F(TString::Format("Pulls_wrt_line_%03f_%06f",expCollection[i].res.X17mass,expCollection[i].res.gve),"PullsLine",100,-10,10);
     for(int p = 0;p<NP-NS;p++){
       hPuls->Fill(expCollection[i].res.grRes.pulls[p]);
+      hPuls_ov_sigma->Fill(expCollection[i].res.grRes.pulls_ov_sigma[p]);
     }
+
+#ifdef SAVEALLPLOTS
+    N2ovNPoTDir->cd();
+    expCollection[i].res.grRes.grN2ovNPoT.Write();
+
+    N2ovNPoTCorrDir->cd();
+    expCollection[i].res.grRes.grN2ovNPoTCorr.Write();
+    
+    N2ovNPoTCorrMaskDir->cd();
+    expCollection[i].res.grRes.grN2ovNPoTCorrMask.Write();
+
+    PullsOvSigmaDir->cd();
+    expCollection[i].res.grRes.grPullsOvSigma.Write();
+
+
+#endif     
+    
+    
   }
 
   outHistoFile->cd();
@@ -931,8 +1027,36 @@ void analyzeSystChecks(){
   grTrueRecoMassDiffMX17Gve->Write();
   grChi2MX17Gve->Write();
   grChi2MaskMX17Gve->Write();
+  
   outHistoFile->Write();
   outHistoFile->Close();
+}
+
+int readExpDataFile(std::string fData){
+  TFile *DataIn = new TFile(fData.c_str(),"READ");
+
+
+  
+  TGraphErrors *grNPoT   = (TGraphErrors *) DataIn->Get("gPoT");
+  TGraphErrors *grEffBkg = (TGraphErrors *) DataIn->Get("gBkg");
+  TGraphErrors *grSigEff = (TGraphErrors *) DataIn->Get("gEff");
+  TGraphErrors *grNEvents= (TGraphErrors *) DataIn->Get("gNObs");
+  grNPoT->Sort();grNPoT->Scale(1e-10);
+  
+  grEffBkg->Sort();
+  grSigEff->Sort();
+  grNEvents->Sort();
+  
+  readExpDataFromGraphs(grNEvents, grNPoT, grEffBkg, grSigEff);
+  
+#ifdef DEBUGALL
+  std::cout << "ExpCollection size: " << expCollection.size() << std::endl;
+#endif
+  
+  // expCollection[expCollection.size()-1].res.X17mass = 0.;
+  // expCollection[expCollection.size()-1].res.gve = 0.;
+
+  return 0;
 }
 
 int main(int argc, char **argv) {
@@ -940,7 +1064,8 @@ int main(int argc, char **argv) {
 
   //generateTestData();
  // readMCTestDataFiles("data/selectedSPlusB.root","data/usedInput.root");
-  readMCTestDataFiles("data/geneSignalPlusBkg.root","data/inputFilesUsed.root");
+  // readMCTestDataFiles("data/geneSignalPlusBkg.root","data/inputFilesUsed.root");
+  readExpDataFile("prova_zip.root");
   //  writeAllData("output.dat");
   //readAllData("output.dat");
   //  printAllData();
