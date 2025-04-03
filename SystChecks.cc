@@ -1128,7 +1128,7 @@ int main(int argc, char **argv) {
 
       
     default: /* '?' */
-      fprintf(stderr, "Usage:\n  \t%s [-d dataFile] \n\t%s [ -s SignaBkgFile -p PoTFile]\n",
+      fprintf(stderr, "Usage:\n  \t%s [-d dataFile] \n\t%s [-m -s SignaBkgFile -p PoTFile]\n",
 	      argv[0],argv[0]);
       exit(EXIT_FAILURE);
     }
