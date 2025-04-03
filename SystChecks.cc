@@ -13,7 +13,7 @@
 #define USEMASS
 
 //#define DEBUGALL
-//#define DEBUG
+#define DEBUG
 
 #define CUSTOMFIT
 //#define SAVEALLPLOTS
@@ -98,9 +98,9 @@ typedef struct {
   TGraphErrors grN2ovNPoT;
   TGraphErrors grN2ovNPoTCorr;
   TGraphErrors grN2ovNPoTCorrMask;
-  TGraphErrors grPullsOvSigma;
 #endif
-  
+  TGraphErrors grPullsOvSigma;
+
 } graphTestRes_t; 
 
 typedef struct {
@@ -321,20 +321,22 @@ void checkGraph(TGraphErrors *gr,graphTestRes_t &res) {
 
   double minChi2=1e6;
   int iMaskStart = 0;
-
+  TF1 *fitF ;
 
   //Fit function to describe the graph
 #ifdef CUSTOMFIT
-  TF1 *fitF = new TF1("fitF",fitFunc,gr->GetX()[0],gr->GetX()[gr->GetN()-1],NFITPARS);
+  //  TF1 *
+  fitF = new TF1("fitF",fitFunc,gr->GetX()[0]-0.5,gr->GetX()[gr->GetN()-1]+0.5,NFITPARS);
 
 
   fitF->SetParameters(fitFuncInitalPars);
   gr->Fit(fitF,"q");
 #else
 
-  {
+  //{
   gr->Fit("pol1","q");
-  TF1* fitF = gr->GetFunction("pol1");
+  //  TF1*
+  fitF = gr->GetFunction("pol1");
 #endif
 
   TH1F *hPulls = new TH1F("hPulsSignal","Pulls with respect to a fit",
@@ -355,7 +357,7 @@ void checkGraph(TGraphErrors *gr,graphTestRes_t &res) {
  // res.fitPars[1][1] = fitF->GetParError(1);
    if(hPulls) delete hPulls;
 #ifndef CUSTOMFIT
-  }
+   // }
 #endif
   for(int imask = 0;NS > 0 && imask<=gr->GetN() - NS;imask++){
     //copy the graph
@@ -369,7 +371,8 @@ void checkGraph(TGraphErrors *gr,graphTestRes_t &res) {
     grPart.Fit(fitF,"q");
 #else
     grPart.Fit("pol1","q");
-    TF1* fitF = grPart.GetFunction("pol1");
+    //    TF1*
+    fitF = grPart.GetFunction("pol1");
 #endif
 
     double chi2 = fitF->GetChisquare();
@@ -378,19 +381,8 @@ void checkGraph(TGraphErrors *gr,graphTestRes_t &res) {
       iMaskStart = imask;
     }
   }
-  
-#ifdef DEBUG
-  std::cout << "==" << gr->GetName() << "==  "<< "Best chi2 achieved: " << minChi2 << "  NDF:  " <<  fitF->GetNDF()
-#ifdef DEBUGALL    
-	    << "  with mask starting at:  "
-	    << iMaskStart
-	    << "  Starting from chi2:   "
-	    << res.chi2
-#endif
-	    << std::endl;
-#endif
 
-  
+
 
   TGraphErrors grPart(*gr);
   for(int i=0;i<NS;i++){
@@ -403,9 +395,24 @@ void checkGraph(TGraphErrors *gr,graphTestRes_t &res) {
   grPart.Fit(fitF,"q");
 #else
   grPart.Fit("pol1","q");
-  TF1* fitF = grPart.GetFunction("pol1");
+  //  TF1*
+  fitF = grPart.GetFunction("pol1");
 #endif
+
   minChi2 = fitF->GetChisquare();
+
+#ifdef DEBUG
+  std::cout << "==" << gr->GetName() << "==  "<< "Best chi2 achieved: " << minChi2 << "  NDF:  " <<  fitF->GetNDF()
+#ifdef DEBUGALL    
+	    << "  with mask starting at:  "
+	    << iMaskStart
+	    << "  Starting from chi2:   "
+	    << res.chi2
+#endif
+	    << std::endl;
+#endif
+
+
   double averageValue = res.meanValMask = grPart.GetMean(2); //Get mean of the values on the Y axis
 
   TH1F *hPullsMask = new TH1F("hPulsSignalMask","Pulls with respect to a fit",
@@ -425,6 +432,12 @@ void checkGraph(TGraphErrors *gr,graphTestRes_t &res) {
 #ifdef     SAVEALLPLOTS
     res.grPullsOvSigma.SetPoint( res.grPullsOvSigma.GetN() , grPart.GetX()[i],  (grPart.GetY()[i] - fitF->Eval(grPart.GetX()[i])) /grPart.GetEY()[i]  );
 #endif
+    
+#ifndef  SAVEALLPLOTS
+    res.grPullsOvSigma.SetPoint( res.grPullsOvSigma.GetN() , i,  (grPart.GetY()[i] - fitF->Eval(grPart.GetX()[i])) /grPart.GetEY()[i]  );
+#endif
+
+
   }
 
 #ifdef DEBUGALL
@@ -480,9 +493,10 @@ void checkGraph(TGraphErrors *gr,graphTestRes_t &res) {
   res.grN2ovNPoTCorrMask = grPart;
 #endif
 
-  
+#ifdef CUSTOMFIT  
   if(fitF) delete fitF;
-
+#endif
+  
   if(hPullsMask) delete hPullsMask;
   if(hPullsOvSigmaMask) delete hPullsOvSigmaMask;
 
@@ -576,12 +590,12 @@ void performExpSystChecks(experiment_t &exp){
 
    exp.res.grRes.grN2ovNPoTCorrMask.SetTitle(TString::Format("grN2ovNPoTCorrMask_%03f_%06f",exp.res.X17mass,exp.res.gve));
   exp.res.grRes.grN2ovNPoTCorrMask.SetName(TString::Format("grN2ovNPoTCorrMask_%03f_%06f",exp.res.X17mass,exp.res.gve));
+#endif
 
   exp.res.grRes.grPullsOvSigma.SetTitle(TString::Format("grPullsOvSigma_%03f_%06f",exp.res.X17mass,exp.res.gve));
   exp.res.grRes.grPullsOvSigma.SetName(TString::Format("grPullsOvSigma_%03f_%06f",exp.res.X17mass,exp.res.gve));
 
  
-#endif
 
   if(0){ 
 
@@ -846,10 +860,10 @@ void analyzeSystChecks(){
 
   outHistoFile->cd();
   TDirectory *N2ovNPoTCorrMaskDir = outHistoFile->mkdir("N2ovNPoTCorrMask");
-  
+#endif
+
   outHistoFile->cd();
   TDirectory *PullsOvSigmaDir = outHistoFile->mkdir("PullsOvSigma");
-#endif
   
   hDir->cd();
   
@@ -1021,24 +1035,24 @@ void analyzeSystChecks(){
     
     N2ovNPoTCorrMaskDir->cd();
     expCollection[i].res.grRes.grN2ovNPoTCorrMask.Write();
-
+#endif
+    
     PullsOvSigmaDir->cd();
     expCollection[i].res.grRes.grPullsOvSigma.Write();
 
 
-#endif     
     
     
   }
 
   outHistoFile->cd();
-  
 
+#ifdef SAVEALLPLOTS
+  
   grConstMaskMX17Gve->Write();
   grChi2MaskMX17Gve->Write();
   grSlopeMaskMX17Gve->Write();
   
-#ifdef SAVEALLPLOTS
   grSlopeMX17Gve->Write();  
   grTrueRecoMassDiffMX17Gve->Write();
   grChi2MX17Gve->Write();
