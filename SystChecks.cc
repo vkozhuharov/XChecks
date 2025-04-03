@@ -1019,6 +1019,9 @@ void analyzeSystChecks(){
     hProbMaskMX17Gve->SetBinContent(binMass,binGve,expCollection[i].res.grRes.probMask);
 
     expDir->cd();
+    //#ifndef SAVEALLPLOTS
+    TH1::AddDirectory(true);
+  //#endif
     TH1F *hPuls = new TH1F(TString::Format("Pulls_%03f_%06f",expCollection[i].res.X17mass,expCollection[i].res.gve),"Pulls",100,-0.1,0.1);
     TH1F *hPuls_ov_sigma = new TH1F(TString::Format("Pulls_wrt_line_%03f_%06f",expCollection[i].res.X17mass,expCollection[i].res.gve),"PullsLine",100,-10,10);
     for(int p = 0;p<NP-NS;p++){
