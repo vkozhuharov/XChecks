@@ -1140,7 +1140,7 @@ int main(int argc, char **argv) {
   //generateTestData();
  // readMCTestDataFiles("data/selectedSPlusB.root","data/usedInput.root");
   //   readMCTestDataFiles("data/geneSignalPlusBkg.root","data/inputFilesUsed.root");
-  // readExpDataFile("prova_zip.root");
+  
   //  writeAllData("output.dat");
   //readAllData("output.dat");
   //  printAllData();
