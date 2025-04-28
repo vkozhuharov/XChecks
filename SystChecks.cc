@@ -12,11 +12,11 @@
 #define USEROOT
 #define USEMASS
 
-//#define DEBUGALL
+#define DEBUGALL
 #define DEBUG
 
 #define CUSTOMFIT
-//#define SAVEALLPLOTS
+#define SAVEALLPLOTS
 
 
 
@@ -32,6 +32,7 @@
 #include "TFile.h"
 #include "TIterator.h"
 #include "TKey.h"
+#include "TFitResult.h"
 
 TRandom myRandom;
 #endif
@@ -42,6 +43,7 @@ TRandom myRandom;
 
 const int NPMAX = 47;  //Number of energy points
 const int NS = 10;   //Number of points in the signal
+const float ErrScale = 2.;
 
 int NP = 0;
 
@@ -91,6 +93,8 @@ typedef struct {
   double pullsRMSMask;
   double meanValMask;
   double fitParsMask[2];//[2];
+  double fitParsMaskCorr[2][2];//[2];
+
   double pulls[NPMAX-NS];
   double pulls_ov_sigma[NPMAX-NS];
 
@@ -120,12 +124,16 @@ results_t expRes;
 
 std::vector<experiment_t> expCollection;
 
+experiment_t modExp;
+
 
 #define NFITPARS 2
 const Double_t fitFuncInitalPars[NFITPARS] = {1.,0};
 Double_t fitFunc(Double_t *x, Double_t *par){
-//  return par[0] + par[1]*x[0];
+// return par[0] + par[1]*x[0];
+  //return par[0];
   return par[0] + par[1]*(x[0] - 16.92);
+  //  return par[0] + par[1]*(x[0]-16.9) + par[2]*(x[0]-16.9)*(x[0] - 16.9);
 }
 
 
@@ -392,9 +400,9 @@ void checkGraph(TGraphErrors *gr,graphTestRes_t &res) {
 
 #ifdef CUSTOMFIT
   fitF->SetParameters(fitFuncInitalPars);
-  grPart.Fit(fitF,"q");
+  TFitResultPtr fitResults = grPart.Fit(fitF,"Sq");
 #else
-  grPart.Fit("pol1","q");
+  TFitResultPtr fitResults = grPart.Fit("pol1","Sq");
   //  TF1*
   fitF = grPart.GetFunction("pol1");
 #endif
@@ -454,10 +462,31 @@ void checkGraph(TGraphErrors *gr,graphTestRes_t &res) {
    //	   <<  std::endl;
    // std::cout << "==" << gr->GetName() << "=="
 	   << "  RMS of the pulls/sigma:   "<< hPullsOvSigmaMask->GetRMS() <<  std::endl;
+
  std::cout << "==" << gr->GetName()
 	   << "==  Const:   "<< fitF->GetParameter(0) << " +- " << fitF->GetParError(0) 
 	   << "   Slope:  " << fitF->GetParameter(1) << " +- " << fitF->GetParError(1)
+   //<< "   Quadr. term:  " << fitF->GetParameter(2) << " +- " << fitF->GetParError(2)
 	   <<  std::endl;
+ 
+ std::cout << "==" << gr->GetName() << "==  "
+	   << " Covvariance matrix   " << std::endl
+   	   << fitResults->GetCovarianceMatrix()(0,0) <<"   " << fitResults->GetCovarianceMatrix()(0,1)
+	   << std::endl
+  	   << fitResults->GetCovarianceMatrix()(1,0) <<"   " << fitResults->GetCovarianceMatrix()(1,1)
+ 	   <<  std::endl;
+
+ std::cout << "==" << gr->GetName() << "==  "
+	   << " Correlation matrix   " << std::endl
+   	   << fitResults->GetCorrelationMatrix()(0,0) <<"   " << fitResults->GetCorrelationMatrix()(0,1)
+	   << std::endl
+  	   << fitResults->GetCorrelationMatrix()(1,0) <<"   " << fitResults->GetCorrelationMatrix()(1,1)
+ 	   <<  std::endl;
+
+
+
+ 
+
 #endif
 
   //Save the results for further usage
@@ -663,10 +692,12 @@ void performExpSystChecks(experiment_t &exp){
 
 //void readMCTestData(std::string fData, std::string fInput){
 void readExpDataFromGraphs(TGraphErrors *grNEvents, 
-                    TGraphErrors *grNPoT, 
-                    TGraphErrors *grEffBkg,
-                    TGraphErrors *grSigEff){
+			   TGraphErrors *grNPoT, 
+			   TGraphErrors *grEffBkg,
+			   TGraphErrors *grSigEff,
+			   int mod = 0){
 
+  std::cout << "Mode for data input: " << mod << std::endl;
 //  TFile *ParsIn = new TFile(fInput.c_str(),"READ");
 //  TFile *DataIn = new TFile(fData.c_str(),"READ");
 
@@ -711,33 +742,65 @@ void readExpDataFromGraphs(TGraphErrors *grNEvents,
   //The input structures seem to be self-consistent ... at least
 
   experiment_t exp;
-
-  expMeasurement_t *expData = exp.data;
+  expMeasurement_t *expData;
+  
+  if(mod == 1) {
+    expData = modExp.data;
+  } else {
+    expData = exp.data;
+  }
 
 #ifdef DEBUGALL
   std::cout << "Filling in the necessary structures " << std::endl;
 #endif
 
   for(int i = 0;i<nPoints; i++){
+    std::cout << "Reading grNEvents X point " << i << std::endl;
     expData[i].mass.val = grNEvents->GetX()[i];
-
+    std::cout << "Reading grNEvents Y point " << i << std::endl;
+    
     expData[i].signal.val = grNEvents->GetY()[i];
+
     expData[i].signal.stat = std::sqrt(  expData[i].signal.val);
     calcParError(expData[i].signal);
+    if(mod==2) {
+      expData[i].signal.err /= ErrScale;
+    }
+    
+    std::cout << "Reading grNPoT Y point " << i << std::endl;
 
     expData[i].pot.val = grNPoT->GetY()[i]*1e10;
-    expData[i].pot.err = grNPoT->GetEY()[i]*1e10;
-    expData[i].mass.err = grNPoT->GetEX()[i];
+    std::cout << "Reading grNPoT EY point " << i << std::endl;
+    if(mod != 2) {
+      expData[i].pot.err = grNPoT->GetEY()[i]*1e10;
+      std::cout << "Reading grNPoT EX point " << i << std::endl;
+      expData[i].mass.err = grNPoT->GetEX()[i];
+    } else {
+      expData[i].pot.err = modExp.data[i].pot.err/ErrScale;
+      std::cout << "Reading grNPoT EX point " << i << std::endl;
+      expData[i].mass.err = modExp.data[i].mass.err/ErrScale;
+
+    }
+    std::cout << "Reading grEffBkg point " << i << std::endl;
 
     expData[i].accCorr.val = 1./grEffBkg->GetY()[i];
-    expData[i].accCorr.err = grEffBkg->GetEY()[i] / (expData[i].accCorr.val * expData[i].accCorr.val )  ;
+    //    expData[i].accCorr.err = grEffBkg->GetEY()[i] / expData[i].accCorr.val * expData[i].accCorr.val )  ;
+    if(mod != 2) {
+
+      expData[i].accCorr.err = (grEffBkg->GetEY()[i] / grEffBkg->GetY()[i])    * expData[i].accCorr.val   ;
+    } else {
+      expData[i].accCorr.err = modExp.data[i].accCorr.err/ErrScale;
+    }
+    //    std::cout << "Read grEffBkg point " << i << std::endl;
 
     expData[i].potCorr.val = 1.;// 0.878;
     expData[i].potCorr.err = 0.;//0.08*expData[i].potCorr.val;
+    
 
   }
 
-  expCollection.push_back(exp);
+  if(mod != 1)
+    expCollection.push_back(exp);
 
 #ifdef DEBUGALL
 
@@ -1066,7 +1129,7 @@ void analyzeSystChecks(){
   outHistoFile->Close();
 }
 
-int readExpDataFile(std::string fData){
+int readExpDataFile(std::string fData, int mod = 0){
   TFile *DataIn = new TFile(fData.c_str(),"READ");
 
 
@@ -1075,13 +1138,20 @@ int readExpDataFile(std::string fData){
   TGraphErrors *grEffBkg = (TGraphErrors *) DataIn->Get("gBkg");
   TGraphErrors *grSigEff = (TGraphErrors *) DataIn->Get("gEff");
   TGraphErrors *grNEvents= (TGraphErrors *) DataIn->Get("gNObs");
+  if(grNEvents == NULL)
+    grNEvents= (TGraphErrors *) DataIn->Get("gN2NoBkgOvN2");
+
+  if(grNEvents == NULL)
+    exit(0);
+  
+  
   grNPoT->Sort();grNPoT->Scale(1e-10);
   
   grEffBkg->Sort();
   grSigEff->Sort();
   grNEvents->Sort();
   
-  readExpDataFromGraphs(grNEvents, grNPoT, grEffBkg, grSigEff);
+  readExpDataFromGraphs(grNEvents, grNPoT, grEffBkg, grSigEff,mod);
   
 #ifdef DEBUGALL
   std::cout << "ExpCollection size: " << expCollection.size() << std::endl;
@@ -1093,9 +1163,54 @@ int readExpDataFile(std::string fData){
   return 0;
 }
 
+int readMCBkgDataFile(std::string fData){
+  TFile *DataIn = new TFile(fData.c_str(),"READ");
+
+  TDirectory *DirIn = (TDirectory *) DataIn -> Get("BkgOnly");
+
+  TGraphErrors *grNPoT   ;
+  TGraphErrors *grEffBkg ;
+  TGraphErrors *grSigEff ;
+  TGraphErrors *grNEvents;
+
+  for (int iMC=0;iMC < 150;iMC++) {
+    
+  
+    grNPoT   = (TGraphErrors *) DirIn->Get(TString::Format("gNPOT_%d",iMC));
+    grEffBkg = (TGraphErrors *) DirIn->Get(TString::Format("gNBkg_%d",iMC));
+    grSigEff = (TGraphErrors *) DirIn->Get(TString::Format("gEffi_%d",iMC));
+    grNEvents= (TGraphErrors *) DirIn->Get(TString::Format("gNObs_%d",iMC));
+
+    
+  if(grNEvents == NULL)
+    grNEvents= (TGraphErrors *) DataIn->Get("gN2NoBkgOvN2");
+
+  if(grNEvents == NULL)
+    exit(0);
+  
+  
+  grNPoT->Sort();//grNPoT->Scale(1e-10); 
+  grEffBkg->Sort();
+  grSigEff->Sort();
+  grNEvents->Sort();
+  
+  readExpDataFromGraphs(grNEvents, grNPoT, grEffBkg, grSigEff,2);
+  
+#ifdef DEBUGALL
+  std::cout << "ExpCollection size: " << expCollection.size() << std::endl;
+#endif
+  
+  // expCollection[expCollection.size()-1].res.X17mass = 0.;
+  // expCollection[expCollection.size()-1].res.gve = 0.;
+  }
+  return 0;
+}
+
+
 int main(int argc, char **argv) {
   init();
 
+  int data; 
   char dataFile[56];
   char mcFileSigBkg[56];
   char mcFilePotEff[56];
@@ -1104,19 +1219,32 @@ int main(int argc, char **argv) {
   int dataFilePresent = 0;
   int mcFileSigBkgPresent=0;
   int mcFilePotEffPresent=0;
+  int mcFileBkgOnlyPresent = 0;
 
+  
+  int bkg = 0;
+  char mcFileBkgOnly[56];
+    
   int opt;
+
+  int nDataTypes = 0;
   
-  
-  while ((opt = getopt(argc, argv, "d:ms:p:")) != -1) {
+  while ((opt = getopt(argc, argv, "di:ms:p:bf:")) != -1) {
     switch (opt) {
     case 'd':
+      data = 1;
+      nDataTypes++;
+     break;
+     
+    case 'i':      
       printf("Using data file: %s\n",optarg);
       strcpy(dataFile,optarg);
       dataFilePresent=1;
+      //      nDataTypes++;
       break;
     case 'm':
       mc=1;
+      nDataTypes++;
       break;
     case 's':
       printf("Using MC generated series of experiments: %s\n",optarg);
@@ -1128,7 +1256,17 @@ int main(int argc, char **argv) {
       strcpy(mcFilePotEff ,optarg);
       mcFilePotEffPresent=1;
       break;
+    case 'b':
+      bkg = 1;
+      break;
 
+    case 'f':
+      printf("Using background only PoT and determined efficiencies: %s\n",optarg);
+      strcpy(mcFileBkgOnly ,optarg);
+      nDataTypes++;
+      mcFileBkgOnlyPresent =1;
+      break;
+      
       
     default: /* '?' */
       fprintf(stderr, "Usage:\n  \t%s [-d dataFile] \n\t%s [-m -s SignaBkgFile -p PoTFile]\n",
@@ -1148,34 +1286,44 @@ int main(int argc, char **argv) {
   //readAllData("output.dat");
   //  printAllData();
 
-  if((dataFilePresent == 0 && mc == 0) || (  dataFilePresent == 1 && mc == 1 )   ) {
+  if((data == 0 && mc == 0 && bkg == 0 ) ||
+     //     (  dataFilePresent == 1 && mc == 1 )
+     (nDataTypes > 1)
+     ) {
     std::cout << " You need either MC or data to be processed " << " .... EXITING" << std::endl;
     exit(0);
   }
 
   
   
-   if(dataFilePresent) {
-     readExpDataFile(dataFile);
-   }
-
-   if(mc) {
-     if(mcFileSigBkgPresent == 1 && mcFilePotEffPresent ==1) {
-       readMCTestDataFiles(mcFileSigBkg,mcFilePotEff);
-     } else {
-       std::cout << "Please provide the two data files with MC experiments and PoT, signam and Bkg efficiency..." << " ... EXITING" << std::endl;
-       exit(0);
-     }
-   }
-   
-   
-   performSystChecks();
+  if(data && dataFilePresent) {
+    readExpDataFile(dataFile);
+  }
   
-
+  if(mc) {
+    if(mcFileSigBkgPresent == 1 && mcFilePotEffPresent ==1) {
+      readMCTestDataFiles(mcFileSigBkg,mcFilePotEff);
+    } else {
+      std::cout << "Please provide the two data files with MC experiments and PoT, signam and Bkg efficiency..." << " ... EXITING" << std::endl;
+      exit(0);
+    }
+  }
+  
+  if(bkg) {
+    readExpDataFile(dataFile,1);
+    readMCBkgDataFile(mcFileBkgOnly);
+    
+  }
+  
+  
+  
+  performSystChecks();
+  
+  
   analyzeSystChecks();
-
-
-
-
+  
+  
+  
+  
   return 0;
 }
