@@ -37,13 +37,13 @@
 TRandom myRandom;
 #endif
 
-
+double errCorr = 0.;
 
 
 
 const int NPMAX = 47;  //Number of energy points
 const int NS = 10;   //Number of points in the signal
-const float ErrScale = 2.;
+const float ErrScale = 1.;
 
 int NP = 0;
 
@@ -762,6 +762,7 @@ void readExpDataFromGraphs(TGraphErrors *grNEvents,
     expData[i].signal.val = grNEvents->GetY()[i];
 
     expData[i].signal.stat = std::sqrt(  expData[i].signal.val);
+    expData[i].signal.syst = expData[i].signal.val * errCorr/100; 
     calcParError(expData[i].signal);
     if(mod==2) {
       expData[i].signal.err /= ErrScale;
@@ -1229,11 +1230,15 @@ int main(int argc, char **argv) {
 
   int nDataTypes = 0;
   
-  while ((opt = getopt(argc, argv, "di:ms:p:bf:")) != -1) {
+  while ((opt = getopt(argc, argv, "di:ms:p:bf:e:")) != -1) {
     switch (opt) {
     case 'd':
       data = 1;
       nDataTypes++;
+     break;
+    case 'e':
+      errCorr = atof(optarg);
+      printf("Using error correction of: %lf\n",errCorr);
      break;
      
     case 'i':      
