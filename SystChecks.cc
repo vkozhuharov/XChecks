@@ -1169,6 +1169,9 @@ int readMCBkgDataFile(std::string fData){
 
   TDirectory *DirIn = (TDirectory *) DataIn -> Get("BkgOnly");
 
+  static float mass = 16.5;
+  static float gve = 1e-4;
+  
   TGraphErrors *grNPoT   ;
   TGraphErrors *grEffBkg ;
   TGraphErrors *grSigEff ;
@@ -1200,9 +1203,10 @@ int readMCBkgDataFile(std::string fData){
 #ifdef DEBUGALL
   std::cout << "ExpCollection size: " << expCollection.size() << std::endl;
 #endif
-  
-  // expCollection[expCollection.size()-1].res.X17mass = 0.;
-  // expCollection[expCollection.size()-1].res.gve = 0.;
+  mass+= 0.02;
+  gve+=1e-5;
+  expCollection[expCollection.size()-1].res.X17mass = mass;
+  expCollection[expCollection.size()-1].res.gve = gve;
   }
   return 0;
 }
