@@ -910,6 +910,9 @@ void performSystChecks(){
 void analyzeSystChecks(){
   std::cout << " Number of experiments to analyze:  " << expCollection.size() << std::endl;
 
+  int nExp=0;
+  int nSuccess=0;
+  
 
   TFile *outHistoFile = new TFile("SystCheckResults.root","RECREATE");
   outHistoFile->cd();
@@ -1017,6 +1020,7 @@ void analyzeSystChecks(){
 
 
   for(int i = 0; i < expCollection.size();i++){
+    nExp++;
     hChi2->Fill(expCollection[i].res.grRes.chi2);
     hChi2Mask->Fill(expCollection[i].res.grRes.minChi2);
 
@@ -1041,6 +1045,9 @@ void analyzeSystChecks(){
 
     hProb->Fill(expCollection[i].res.grRes.prob);
     hProbMask->Fill(expCollection[i].res.grRes.probMask);
+    if(expCollection[i].res.grRes.probMask > 0.2){
+      nSuccess++;
+    };
 
     hMassMask->Fill( expCollection[i].res.grRes.massMask);
     hMassMaskVsMass->Fill( expCollection[i].res.X17mass,expCollection[i].res.grRes.massMask);
@@ -1114,6 +1121,14 @@ void analyzeSystChecks(){
     
     
   }
+
+
+  std::cout << "=======  All exp:  " << nExp
+	    << "   Successful:  " <<  nSuccess
+	    << "   Success Probability:    " << (1. * nSuccess )/nExp
+	    << "   Fail Probability:    " << (1. * (nExp - nSuccess) )/nExp
+	    << "=======  " <<  std::endl;
+  
 
   outHistoFile->cd();
 
