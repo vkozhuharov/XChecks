@@ -762,11 +762,14 @@ void readExpDataFromGraphs(TGraphErrors *grNEvents,
     expData[i].signal.val = grNEvents->GetY()[i];
 
     expData[i].signal.stat = std::sqrt(  expData[i].signal.val);
-    expData[i].signal.syst = expData[i].signal.val * errCorr/100; 
+    //    expData[i].signal.syst = expData[i].signal.val * errCorr/100;
+    expData[i].signal.val += myRandom.Gaus()* expData[i].signal.val* errCorr/100 ;
     calcParError(expData[i].signal);
     if(mod==2) {
       expData[i].signal.err /= ErrScale;
     }
+
+    
     
     std::cout << "Reading grNPoT Y point " << i << std::endl;
 
