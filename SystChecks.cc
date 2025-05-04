@@ -1179,8 +1179,8 @@ int readExpDataFile(std::string fData, int mod = 0){
   std::cout << "ExpCollection size: " << expCollection.size() << std::endl;
 #endif
   
-  // expCollection[expCollection.size()-1].res.X17mass = 0.;
-  // expCollection[expCollection.size()-1].res.gve = 0.;
+  expCollection[expCollection.size()-1].res.X17mass = 0.;
+  expCollection[expCollection.size()-1].res.gve = 0.;
 
   return 0;
 }
