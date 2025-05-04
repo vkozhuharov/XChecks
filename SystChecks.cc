@@ -743,13 +743,16 @@ void readExpDataFromGraphs(TGraphErrors *grNEvents,
 
   experiment_t exp;
   expMeasurement_t *expData;
-  
+
   if(mod == 1) {
     expData = modExp.data;
   } else {
     expData = exp.data;
   }
 
+  memset(expData,0, sizeof(expMeasurement_t)*NPMAX);
+
+  
 #ifdef DEBUGALL
   std::cout << "Filling in the necessary structures " << std::endl;
 #endif
@@ -1045,7 +1048,7 @@ void analyzeSystChecks(){
 
     hProb->Fill(expCollection[i].res.grRes.prob);
     hProbMask->Fill(expCollection[i].res.grRes.probMask);
-    if(expCollection[i].res.grRes.probMask > 0.2){
+    if(expCollection[i].res.grRes.probMask > 0.4){
       nSuccess++;
     };
 
@@ -1123,11 +1126,11 @@ void analyzeSystChecks(){
   }
 
 
-  std::cout << "=======  All exp:  " << nExp
+  std::cout << "++++++  All exp:  " << nExp
 	    << "   Successful:  " <<  nSuccess
 	    << "   Success Probability:    " << (1. * nSuccess )/nExp
 	    << "   Fail Probability:    " << (1. * (nExp - nSuccess) )/nExp
-	    << "=======  " <<  std::endl;
+	    << "  ++++++  " << errCorr/100 <<  std::endl;
   
 
   outHistoFile->cd();
@@ -1233,10 +1236,10 @@ int readMCBkgDataFile(std::string fData){
 int main(int argc, char **argv) {
   init();
 
-  int data; 
-  char dataFile[56];
-  char mcFileSigBkg[56];
-  char mcFilePotEff[56];
+  int data=0; 
+  char dataFile[128];
+  char mcFileSigBkg[128];
+  char mcFilePotEff[128];
 
   int mc = 0;
   int dataFilePresent = 0;
@@ -1246,9 +1249,9 @@ int main(int argc, char **argv) {
 
   
   int bkg = 0;
-  char mcFileBkgOnly[56];
+  char mcFileBkgOnly[128];
     
-  int opt;
+  int opt=0;
 
   int nDataTypes = 0;
   
